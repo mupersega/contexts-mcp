@@ -1,7 +1,7 @@
 {
   "name": "contexts-mcp",
-  "version": "1.0.0",
-  "description": "Local MCP server for managing markdown context files across Claude Code sessions",
+  "version": "2.0.0",
+  "description": "Local MCP server (with optional web UI) for persistent context folders shared across Claude Code sessions. Stores items as md, txt, json, yaml, yml, or csv.",
   "type": "module",
   "bin": {
     "contexts-mcp": "dist/index.js"
@@ -17,12 +17,13 @@
     "@modelcontextprotocol/sdk": "^1.17.0",
     "express": "^5.1.0",
     "gray-matter": "^4.0.3",
+    "js-yaml": "^4.1.0",
     "marked": "^15.0.0",
-    "zod": "^3.23.0",
-    "zod-to-json-schema": "^3.23.5"
+    "zod": "^3.23.0"
   },
   "devDependencies": {
     "@types/express": "^5",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^22",
     "typescript": "^5.8.2"
   }

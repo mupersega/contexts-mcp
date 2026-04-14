@@ -1,4 +1,4 @@
-import { DocumentInfo } from "./types.js";
+import { ContextMetadata, ContextSummary, ItemInfo } from "./types.js";
 import { SearchResult } from "./search.js";
 
 function esc(s: string): string {
@@ -11,6 +11,33 @@ function esc(s: string): string {
 
 function tags(t: string[]): string {
   return t.map((tag) => `<span class="tag">${esc(tag)}</span>`).join(" ");
+}
+
+function contextTagChips(t: string[]): string {
+  return t
+    .map((tag) => `<span class="tag tag-ctx">${esc(tag)}</span>`)
+    .join(" ");
+}
+
+function statusBadge(status?: string): string {
+  if (!status) return "";
+  return `<span class="status-badge">${esc(status)}</span>`;
+}
+
+function linksRow(links: ContextMetadata["links"]): string {
+  if (!links || links.length === 0) return "";
+  const items = links
+    .map(
+      (l) =>
+        `<a class="ctx-link" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)}</a>`
+    )
+    .join(" ");
+  return `<div class="ctx-links">${items}</div>`;
+}
+
+function displayContextTitle(summary: ContextSummary): string {
+  const metaTitle = summary.metadata?.title;
+  return metaTitle && metaTitle.trim().length > 0 ? metaTitle : summary.name;
 }
 
 export function layout(title: string, body: string): string {
@@ -149,6 +176,61 @@ export function layout(title: string, body: string): string {
       border: 1px dashed var(--text-dim); font-family: 'IBM Plex Mono', monospace;
     }
     .tag::before { content: '#'; opacity: 0.5; margin-right: 0.1rem; }
+    .tag-ctx { border-style: dotted; color: var(--text); }
+    .tag-ctx::before { content: '»'; opacity: 0.5; margin-right: 0.2rem; }
+
+    /* --- Status badge --- */
+    .status-badge {
+      display: inline-block; background: var(--surface-raised); color: var(--text-bright);
+      padding: 0.15rem 0.55rem; font-size: 0.7rem; margin-right: 0.4rem;
+      text-transform: uppercase; letter-spacing: 0.12em;
+      border: 2px double var(--border-heavy);
+      font-family: 'IBM Plex Mono', monospace;
+    }
+    .status-badge::before { content: '['; margin-right: 0.15rem; color: var(--text-dim); }
+    .status-badge::after { content: ']'; margin-left: 0.15rem; color: var(--text-dim); }
+
+    /* --- Item kind label --- */
+    .item-kind {
+      display: inline-block; padding: 0 0.35rem; font-size: 0.65rem;
+      color: var(--text-dim); border: 1px solid var(--text-dim);
+      letter-spacing: 0.1em; margin-right: 0.4rem;
+      font-family: 'IBM Plex Mono', monospace;
+      vertical-align: baseline;
+    }
+
+    /* --- Context meta header --- */
+    .ctx-meta-header {
+      background: var(--surface); border: 1px solid var(--border);
+      border-top: 3px double var(--border-heavy); border-bottom: 1px solid var(--border);
+      padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; position: relative;
+    }
+    .ctx-meta-header::before {
+      content: '--- CONTEXT ---'; position: absolute; top: -0.6rem; left: 1rem;
+      background: var(--bg); padding: 0 0.5rem;
+      font-size: 0.6rem; color: var(--text-dim); letter-spacing: 0.15em;
+      font-family: 'IBM Plex Mono', monospace;
+    }
+    .ctx-meta-header h2 { margin-bottom: 0.25rem; }
+    .ctx-meta-header .ctx-slug {
+      color: var(--text-dim); font-size: 0.7rem;
+      text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.75rem;
+    }
+    .ctx-meta-header .ctx-desc {
+      color: var(--text-muted); font-size: 0.85rem; margin: 0.6rem 0;
+      line-height: 1.6; font-style: italic;
+    }
+    .ctx-meta-header .ctx-status-row { margin: 0.5rem 0; }
+    .ctx-links { margin-top: 0.75rem; display: flex; flex-wrap: wrap; gap: 0.4rem; }
+    .ctx-link {
+      display: inline-block; padding: 0.2rem 0.55rem;
+      border: 1px solid var(--border-heavy); background: var(--surface-raised);
+      font-size: 0.7rem; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.08em;
+    }
+    .ctx-link::before { content: '→ '; color: var(--text-dim); }
+    .ctx-link:hover { color: var(--text-bright); border-color: var(--text-bright); border-bottom-style: solid; }
+    .ctx-meta-actions { margin-top: 0.75rem; }
 
     /* --- Buttons --- */
     .btn {
@@ -191,6 +273,8 @@ export function layout(title: string, body: string): string {
       background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8'%3E%3Cpath d='M0 2l4 4 4-4' fill='none' stroke='%23777' stroke-width='1.5'/%3E%3C/svg%3E");
       background-repeat: no-repeat; background-position: right 0.75rem center; padding-right: 2rem;
     }
+    .link-row { display: grid; grid-template-columns: 1fr 2fr; gap: 0.5rem; margin-bottom: 0.4rem; }
+    .link-row input { margin-bottom: 0; }
 
     .actions { display: flex; gap: 0.5rem; align-items: center; }
 
@@ -256,6 +340,10 @@ export function layout(title: string, body: string): string {
       border-left: 3px double var(--border-heavy); padding-left: 1rem;
       color: var(--text-muted); font-style: italic; margin: 1rem 0;
     }
+    .doc-content-raw {
+      white-space: pre; font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.82rem; line-height: 1.65; padding: 2.5rem 2rem;
+    }
 
     /* --- Search --- */
     .search-match {
@@ -317,7 +405,7 @@ export function layout(title: string, body: string): string {
     </header>
     ${body}
     <footer class="classification-footer">
-      DOCUMENT MANAGEMENT SYSTEM v1.0 &mdash; TERMINAL ${terminalId} &mdash; SESSION ACTIVE
+      CONTEXT MANAGEMENT SYSTEM v1.1 &mdash; TERMINAL ${terminalId} &mdash; SESSION ACTIVE
     </footer>
   </div>
   <script>
@@ -353,21 +441,45 @@ export function layout(title: string, body: string): string {
 </html>`;
 }
 
-export function contextListPage(contexts: string[]): string {
+function renderContextCardBody(summary: ContextSummary): string {
+  const meta = summary.metadata;
+  const title = displayContextTitle(summary);
+  const slug = summary.name;
+  const showSlug = title !== slug;
+  const description = meta?.description
+    ? `<div class="ctx-desc" style="margin-top:0.35rem; font-size:0.8rem; color:var(--text-muted); font-style:italic;">${esc(meta.description)}</div>`
+    : "";
+  const status = statusBadge(meta?.status);
+  const ctxTags = meta?.tags && meta.tags.length ? contextTagChips(meta.tags) : "";
+  const statusRow =
+    status || ctxTags
+      ? `<div style="margin-top:0.5rem;">${status}${ctxTags}</div>`
+      : "";
+  const links = meta?.links ? linksRow(meta.links) : "";
+
+  return `
+    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+      <div style="flex:1; min-width:0;">
+        <h3><a href="/ctx/${esc(slug)}">${esc(title)}</a></h3>
+        ${showSlug ? `<div class="meta">${esc(slug)}</div>` : ""}
+        ${description}
+        ${statusRow}
+        ${links}
+      </div>
+      <button class="btn btn-danger btn-sm"
+        hx-delete="/ctx/${esc(slug)}"
+        hx-target="#ctx-${esc(slug)}"
+        hx-swap="outerHTML"
+        hx-confirm="Delete context '${esc(slug)}' and all its items?">Delete</button>
+    </div>`;
+}
+
+export function contextListPage(contexts: ContextSummary[]): string {
   const list = contexts.length
     ? contexts
         .map(
           (c) => `
-      <div class="card" id="ctx-${esc(c)}">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <h3><a href="/ctx/${esc(c)}">${esc(c)}</a></h3>
-          <button class="btn btn-danger btn-sm"
-            hx-delete="/ctx/${esc(c)}"
-            hx-target="#ctx-${esc(c)}"
-            hx-swap="outerHTML"
-            hx-confirm="Delete context '${esc(c)}' and all its documents?">Delete</button>
-        </div>
-      </div>`
+      <div class="card" id="ctx-${esc(c.name)}">${renderContextCardBody(c)}</div>`
         )
         .join("")
     : `<div class="empty">No contexts yet. Create one below.</div>`;
@@ -388,145 +500,174 @@ export function contextListPage(contexts: string[]): string {
   );
 }
 
-export function contextCardFragment(name: string): string {
+export function contextCardFragment(summary: ContextSummary): string {
   return `
-    <div class="card" id="ctx-${esc(name)}">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <h3><a href="/ctx/${esc(name)}">${esc(name)}</a></h3>
-        <button class="btn btn-danger btn-sm"
-          hx-delete="/ctx/${esc(name)}"
-          hx-target="#ctx-${esc(name)}"
-          hx-swap="outerHTML"
-          hx-confirm="Delete context '${esc(name)}' and all its documents?">Delete</button>
+    <div class="card" id="ctx-${esc(summary.name)}">${renderContextCardBody(summary)}</div>`;
+}
+
+export function contextMetaHeader(name: string, meta: ContextMetadata): string {
+  const title = meta.title && meta.title.trim().length > 0 ? meta.title : name;
+  const showSlug = title !== name;
+  const description = meta.description
+    ? `<div class="ctx-desc">${esc(meta.description)}</div>`
+    : "";
+  const status = statusBadge(meta.status);
+  const ctxTags = meta.tags.length ? contextTagChips(meta.tags) : "";
+  const statusRow =
+    status || ctxTags
+      ? `<div class="ctx-status-row">${status}${ctxTags}</div>`
+      : "";
+  const links = linksRow(meta.links);
+
+  return `
+    <div class="ctx-meta-header">
+      <h2>${esc(title)}</h2>
+      ${showSlug ? `<div class="ctx-slug">${esc(name)}</div>` : ""}
+      ${statusRow}
+      ${description}
+      ${links}
+      <div class="ctx-meta-actions">
+        <a href="/ctx/${esc(name)}/meta/edit" class="btn btn-sm">Edit Metadata</a>
       </div>
     </div>`;
 }
 
-export function documentListPage(context: string, docs: DocumentInfo[]): string {
-  const list = docs.length
-    ? docs
-        .map(
-          (d) => `
-      <div class="card" id="doc-${esc(d.name)}">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <div>
-            <h3><a href="/ctx/${esc(context)}/${esc(d.name)}">${esc(d.title)}</a></h3>
-            <div class="meta">${esc(d.name)} &middot; updated ${esc(d.updated ? new Date(d.updated).toLocaleDateString() : "never")}</div>
-            ${d.tags.length ? `<div>${tags(d.tags)}</div>` : ""}
-          </div>
-          <button class="btn btn-danger btn-sm"
-            hx-delete="/ctx/${esc(context)}/${esc(d.name)}"
-            hx-target="#doc-${esc(d.name)}"
-            hx-swap="outerHTML"
-            hx-confirm="Delete '${esc(d.name)}'?">Delete</button>
+function itemRelDate(d: string): string {
+  return d ? new Date(d).toLocaleDateString() : "never";
+}
+
+function itemCardInner(context: string, item: ItemInfo): string {
+  return `
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <h3><span class="item-kind">${item.extension.toUpperCase()}</span><a href="/ctx/${esc(context)}/${esc(item.name)}?ext=${esc(item.extension)}">${esc(item.title)}</a></h3>
+          <div class="meta">${esc(item.name)}.${esc(item.extension)} &middot; updated ${esc(itemRelDate(item.updated))}</div>
+          ${item.tags.length ? `<div>${tags(item.tags)}</div>` : ""}
         </div>
-      </div>`
+        <button class="btn btn-danger btn-sm"
+          hx-delete="/ctx/${esc(context)}/${esc(item.name)}?ext=${esc(item.extension)}"
+          hx-target="#item-${esc(item.name)}-${esc(item.extension)}"
+          hx-swap="outerHTML"
+          hx-confirm="Delete '${esc(item.name)}.${esc(item.extension)}'?">Delete</button>
+      </div>`;
+}
+
+export function itemCardFragment(context: string, item: ItemInfo): string {
+  return `
+    <div class="card" id="item-${esc(item.name)}-${esc(item.extension)}">${itemCardInner(context, item)}</div>`;
+}
+
+export function itemListPage(
+  context: string,
+  meta: ContextMetadata,
+  items: ItemInfo[]
+): string {
+  const list = items.length
+    ? items
+        .map(
+          (i) => `
+      <div class="card" id="item-${esc(i.name)}-${esc(i.extension)}">${itemCardInner(context, i)}</div>`
         )
         .join("")
-    : `<div class="empty">No documents yet. Create one below.</div>`;
+    : `<div class="empty">No items yet. Create one below.</div>`;
 
   return layout(
-    context,
+    meta.title || context,
     `
     <div class="breadcrumb"><a href="/">Contexts</a> / <strong>${esc(context)}</strong></div>
-    <h2>${esc(context)}</h2>
-    <div id="doc-list" style="margin-top:1rem;">${list}</div>
+    ${contextMetaHeader(context, meta)}
+    <div id="item-list" style="margin-top:1rem;">${list}</div>
     <div class="card" style="margin-top:2rem;">
-      <h3>New Document</h3>
-      <form hx-post="/ctx/${esc(context)}/docs" hx-target="#doc-list" hx-swap="beforeend" hx-on::after-request="if(event.detail.successful) this.reset()">
+      <h3>New Item</h3>
+      <form hx-post="/ctx/${esc(context)}/items" hx-target="#item-list" hx-swap="beforeend" hx-on::after-request="if(event.detail.successful) this.reset()">
         <div class="grid-2">
           <div>
-            <label for="document">Name</label>
-            <input type="text" id="document" name="document" pattern="[a-zA-Z0-9_-]+" required placeholder="architecture">
+            <label for="item">Name</label>
+            <input type="text" id="item" name="item" pattern="[a-zA-Z0-9][a-zA-Z0-9_-]*" required placeholder="architecture">
           </div>
           <div>
-            <label for="title">Title</label>
-            <input type="text" id="title" name="title" required placeholder="System Architecture">
+            <label for="extension">Kind</label>
+            <select id="extension" name="extension">
+              <option value="md" selected>Markdown (.md)</option>
+              <option value="txt">Plain text (.txt)</option>
+              <option value="json">JSON (.json)</option>
+              <option value="yaml">YAML (.yaml)</option>
+              <option value="csv">CSV (.csv)</option>
+            </select>
           </div>
         </div>
-        <label for="tags">Tags (comma-separated)</label>
+        <label for="title">Title <span style="color:var(--text-dim); text-transform:none;">(markdown only)</span></label>
+        <input type="text" id="title" name="title" placeholder="System Architecture">
+        <label for="tags">Tags, comma-separated <span style="color:var(--text-dim); text-transform:none;">(markdown only)</span></label>
         <input type="text" id="tags" name="tags" placeholder="design, architecture">
         <label for="content">Content</label>
-        <textarea id="content" name="content" placeholder="# Your markdown here..."></textarea>
-        <button type="submit" class="btn btn-primary">Create Document</button>
+        <textarea id="content" name="content" placeholder="# Your content here..."></textarea>
+        <button type="submit" class="btn btn-primary">Create Item</button>
       </form>
     </div>`
   );
 }
 
-export function documentCardFragment(context: string, d: DocumentInfo): string {
-  return `
-    <div class="card" id="doc-${esc(d.name)}">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <div>
-          <h3><a href="/ctx/${esc(context)}/${esc(d.name)}">${esc(d.title)}</a></h3>
-          <div class="meta">${esc(d.name)} &middot; updated ${esc(d.updated ? new Date(d.updated).toLocaleDateString() : "never")}</div>
-          ${d.tags.length ? `<div>${tags(d.tags)}</div>` : ""}
-        </div>
-        <button class="btn btn-danger btn-sm"
-          hx-delete="/ctx/${esc(context)}/${esc(d.name)}"
-          hx-target="#doc-${esc(d.name)}"
-          hx-swap="outerHTML"
-          hx-confirm="Delete '${esc(d.name)}'?">Delete</button>
-      </div>
-    </div>`;
-}
-
-export function documentViewPage(
+export function itemViewPage(
   context: string,
   name: string,
+  extension: string,
   title: string,
   tagList: string[],
   created: string,
   updated: string,
-  htmlContent: string
+  contentHtml: string,
+  isMarkdown: boolean
 ): string {
+  const appendSupported = isMarkdown || extension === "txt" || extension === "csv";
+  const appendForm = appendSupported
+    ? `<div class="card" style="margin-top:2rem;">
+      <h3>Append Content</h3>
+      <form hx-post="/ctx/${esc(context)}/${esc(name)}/append?ext=${esc(extension)}" hx-target="#doc-body" hx-swap="innerHTML" hx-on::after-request="if(event.detail.successful) this.reset()">
+        <textarea name="content" placeholder="Additional content to append..."></textarea>
+        <button type="submit" class="btn btn-primary">Append</button>
+      </form>
+    </div>`
+    : `<div class="empty" style="margin-top:2rem;">Append is not supported for structured data items (.json, .yaml, .yml). Use Edit to replace the full content.</div>`;
+
+  const contentClass = isMarkdown ? "doc-content" : "doc-content doc-content-raw";
+
   return layout(
     title,
     `
     <div class="breadcrumb">
-      <a href="/">Contexts</a> / <a href="/ctx/${esc(context)}">${esc(context)}</a> / <strong>${esc(name)}</strong>
+      <a href="/">Contexts</a> / <a href="/ctx/${esc(context)}">${esc(context)}</a> / <strong>${esc(name)}.${esc(extension)}</strong>
     </div>
     <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1rem;">
       <div>
-        <h2>${esc(title)}</h2>
+        <h2><span class="item-kind">${extension.toUpperCase()}</span>${esc(title)}</h2>
         <div class="meta" style="color:var(--text-muted); font-size:0.85rem;">
-          Created ${esc(created ? new Date(created).toLocaleDateString() : "unknown")}
+          ${esc(name)}.${esc(extension)}
+          &middot; Created ${esc(created ? new Date(created).toLocaleDateString() : "unknown")}
           &middot; Updated ${esc(updated ? new Date(updated).toLocaleDateString() : "unknown")}
         </div>
         ${tagList.length ? `<div style="margin-top:0.5rem;">${tags(tagList)}</div>` : ""}
       </div>
       <div class="actions">
-        <a href="/ctx/${esc(context)}/${esc(name)}/edit" class="btn btn-sm">Edit</a>
+        <a href="/ctx/${esc(context)}/${esc(name)}/edit?ext=${esc(extension)}" class="btn btn-sm">Edit</a>
       </div>
     </div>
-    <div class="doc-content" id="doc-body">${htmlContent}</div>
-    <div class="card" style="margin-top:2rem;">
-      <h3>Append Content</h3>
-      <form hx-post="/ctx/${esc(context)}/${esc(name)}/append" hx-target="#doc-body" hx-swap="innerHTML" hx-on::after-request="if(event.detail.successful) this.reset()">
-        <textarea name="content" placeholder="Additional markdown to append..."></textarea>
-        <button type="submit" class="btn btn-primary">Append</button>
-      </form>
-    </div>`
+    <div class="${contentClass}" id="doc-body">${contentHtml}</div>
+    ${appendForm}`
   );
 }
 
-export function documentEditPage(
+export function itemEditPage(
   context: string,
   name: string,
+  extension: string,
   title: string,
   tagList: string[],
-  content: string
+  content: string,
+  isMarkdown: boolean
 ): string {
-  return layout(
-    `Edit ${title}`,
-    `
-    <div class="breadcrumb">
-      <a href="/">Contexts</a> / <a href="/ctx/${esc(context)}">${esc(context)}</a> / <a href="/ctx/${esc(context)}/${esc(name)}">${esc(name)}</a> / <strong>Edit</strong>
-    </div>
-    <h2>Edit: ${esc(title)}</h2>
-    <form method="POST" action="/ctx/${esc(context)}/${esc(name)}/edit" style="margin-top:1rem;">
-      <div class="grid-2">
+  const mdFields = isMarkdown
+    ? `<div class="grid-2">
         <div>
           <label for="title">Title</label>
           <input type="text" id="title" name="title" value="${esc(title)}" required>
@@ -535,12 +676,77 @@ export function documentEditPage(
           <label for="tags">Tags (comma-separated)</label>
           <input type="text" id="tags" name="tags" value="${esc(tagList.join(", "))}">
         </div>
-      </div>
+      </div>`
+    : `<div class="meta" style="margin-bottom:0.75rem;">Kind: ${extension.toUpperCase()} &middot; title and tags are markdown-only.</div>`;
+
+  return layout(
+    `Edit ${title}`,
+    `
+    <div class="breadcrumb">
+      <a href="/">Contexts</a> / <a href="/ctx/${esc(context)}">${esc(context)}</a> / <a href="/ctx/${esc(context)}/${esc(name)}?ext=${esc(extension)}">${esc(name)}.${esc(extension)}</a> / <strong>Edit</strong>
+    </div>
+    <h2>Edit: ${esc(title)}</h2>
+    <form method="POST" action="/ctx/${esc(context)}/${esc(name)}/edit?ext=${esc(extension)}" style="margin-top:1rem;">
+      ${mdFields}
       <label for="content">Content</label>
       <textarea id="content" name="content" style="min-height:400px;">${esc(content)}</textarea>
       <div class="actions">
         <button type="submit" class="btn btn-primary">Save</button>
-        <a href="/ctx/${esc(context)}/${esc(name)}" class="btn">Cancel</a>
+        <a href="/ctx/${esc(context)}/${esc(name)}?ext=${esc(extension)}" class="btn">Cancel</a>
+      </div>
+    </form>`
+  );
+}
+
+const META_LINK_ROWS = 5;
+
+export function contextMetaEditPage(name: string, meta: ContextMetadata): string {
+  const linksPadded = [
+    ...meta.links,
+    ...Array(Math.max(0, META_LINK_ROWS - meta.links.length)).fill({ label: "", url: "" }),
+  ].slice(0, META_LINK_ROWS);
+
+  const linkRows = linksPadded
+    .map(
+      (l, i) => `
+      <div class="link-row">
+        <input type="text" name="link_label_${i}" value="${esc(l.label)}" placeholder="Label">
+        <input type="text" name="link_url_${i}" value="${esc(l.url)}" placeholder="https://...">
+      </div>`
+    )
+    .join("");
+
+  return layout(
+    `Edit metadata: ${name}`,
+    `
+    <div class="breadcrumb">
+      <a href="/">Contexts</a> / <a href="/ctx/${esc(name)}">${esc(name)}</a> / <strong>Edit Metadata</strong>
+    </div>
+    <h2>Edit Context Metadata</h2>
+    <form method="POST" action="/ctx/${esc(name)}/meta" style="margin-top:1rem;">
+      <label for="title">Title</label>
+      <input type="text" id="title" name="title" value="${esc(meta.title || "")}" placeholder="${esc(name)}">
+
+      <label for="description">Description</label>
+      <textarea id="description" name="description" style="min-height:80px;" placeholder="Short context description">${esc(meta.description || "")}</textarea>
+
+      <div class="grid-2">
+        <div>
+          <label for="status">Status</label>
+          <input type="text" id="status" name="status" value="${esc(meta.status || "")}" placeholder="pending, in-progress, pr, done...">
+        </div>
+        <div>
+          <label for="tags">Tags (comma-separated)</label>
+          <input type="text" id="tags" name="tags" value="${esc(meta.tags.join(", "))}" placeholder="ui, project">
+        </div>
+      </div>
+
+      <label>Links</label>
+      ${linkRows}
+
+      <div class="actions" style="margin-top:1rem;">
+        <button type="submit" class="btn btn-primary">Save</button>
+        <a href="/ctx/${esc(name)}" class="btn">Cancel</a>
       </div>
     </form>`
   );
@@ -567,8 +773,8 @@ export function searchPage(
             .map(
               (r) => `
         <div class="card">
-          <h3><a href="/ctx/${esc(r.context)}/${esc(r.document)}">${esc(r.title)}</a></h3>
-          <div class="meta">${esc(r.context)} / ${esc(r.document)}</div>
+          <h3><span class="item-kind">${r.extension.toUpperCase()}</span><a href="/ctx/${esc(r.context)}/${esc(r.item)}?ext=${esc(r.extension)}">${esc(r.title)}</a></h3>
+          <div class="meta">${esc(r.context)} / ${esc(r.item)}.${esc(r.extension)}</div>
           ${r.tags.length ? `<div>${tags(r.tags)}</div>` : ""}
           ${r.matches.map((m) => `<div class="search-match">${esc(m.trim())}</div>`).join("")}
         </div>`
@@ -584,11 +790,11 @@ export function searchPage(
       <div class="grid-2">
         <div>
           <label for="q">Query</label>
-          <input type="text" id="q" name="q" value="${esc(query)}" placeholder="Search all documents..." autofocus>
+          <input type="text" id="q" name="q" value="${esc(query)}" placeholder="Search all items..." autofocus>
         </div>
         <div>
           <label for="context">Context (optional)</label>
-          <select id="context" name="context" style="width:100%; padding:0.5rem 0.75rem; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text); font-size:0.9rem; margin-bottom:0.75rem;">
+          <select id="context" name="context">
             <option value="">All contexts</option>
             ${contextOptions}
           </select>
