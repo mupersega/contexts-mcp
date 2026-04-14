@@ -24,13 +24,14 @@ const server = new McpServer(
   {
     capabilities: { tools: {} },
     instructions: [
-      "Persistent context folders for Claude Code sessions. Each context is a folder",
-      "holding items in any text format: md, txt, json, yaml, yml, csv. Markdown items",
-      "carry frontmatter (title, tags, timestamps); other kinds have only filesystem",
-      "metadata. Contexts themselves can carry optional metadata (title, description,",
-      "free-form status, tags, links), equally useful for knowledge-base topics and",
-      "unit-of-work folders.",
-    ].join(" "),
+      "Persistent context folders for Claude Code sessions. A context is a folder holding items in any text format: md (default), txt, json, yaml, yml, csv. Markdown items carry frontmatter (title, tags, timestamps); other kinds have only filesystem metadata. Contexts themselves can carry optional metadata (title, description, free-form status, tags, links) — good for both knowledge-base topics and unit-of-work folders.",
+      "",
+      "How to use this server:",
+      "- When the user asks about a topic that may already be logged, call search_contexts first before answering from scratch.",
+      "- When capturing a new finding, prefer append_to_item onto an existing topical context over creating a new one — contexts work best as growing logs.",
+      "- When exploring what's saved, call list_contexts with include_metadata=true so titles/status/tags are visible in one shot.",
+      "- Markdown is the right default for notes and prose. Only use json/yaml/csv when the payload is structurally meaningful (and note that append_to_item is disabled for those kinds — use update_item to replace).",
+    ].join("\n"),
   }
 );
 
@@ -41,7 +42,7 @@ server.registerTool(
   "list_contexts",
   {
     description:
-      "List all context folders. Pass include_metadata=true to also return each context's title, description, status, tags, and links. Slower, since it reads metadata for every context.",
+      "List all context folders. Pass include_metadata=true to also return each context's title, description, status, tags, and links (slower, since it reads metadata for every context — but use it when you want a map of what topics exist before deciding where to write).",
     inputSchema: ListContextsArgsSchema.shape,
   },
   async (args) => {
@@ -150,7 +151,7 @@ server.registerTool(
   "create_item",
   {
     description:
-      "Create a new item in a context. Specify 'extension' (md, txt, json, yaml, yml, csv). For markdown, also pass title and tags — they go into the YAML frontmatter. For other kinds, just pass content.",
+      "Create a new item in a context. Extension defaults to 'md' — pass one of (md, txt, json, yaml, yml, csv) to override. For markdown, also pass title and tags — they go into the YAML frontmatter. For other kinds, just pass content.",
     inputSchema: CreateItemArgsSchema.shape,
   },
   async (args) => {

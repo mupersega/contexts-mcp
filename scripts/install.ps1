@@ -1,8 +1,11 @@
 # Contexts UI shortcut installer
-# Creates two shortcuts pointing to contexts-ui.vbs:
-#   1. Desktop:    click-to-launch
-#   2. Startup:    auto-runs at Windows login
-# Both are idempotent — re-running overwrites existing shortcuts.
+# Default: creates a Desktop shortcut only (click-to-launch).
+# With -AutoStart: also creates a Startup-folder shortcut (auto-runs at login).
+# Re-running is idempotent — existing shortcuts are overwritten.
+
+param(
+    [switch]$AutoStart
+)
 
 $ErrorActionPreference = 'Stop'
 
@@ -15,8 +18,8 @@ if (-not (Test-Path $vbsPath)) {
     exit 1
 }
 
-$desktopLnk  = Join-Path ([Environment]::GetFolderPath('Desktop'))  'Contexts.lnk'
-$startupLnk  = Join-Path ([Environment]::GetFolderPath('Startup'))  'Contexts.lnk'
+$desktopLnk = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Contexts.lnk'
+$startupLnk = Join-Path ([Environment]::GetFolderPath('Startup')) 'Contexts.lnk'
 
 function New-ContextsShortcut {
     param([string]$LnkPath)
@@ -26,17 +29,26 @@ function New-ContextsShortcut {
     $sc.Arguments        = '"' + $vbsPath + '"'
     $sc.WorkingDirectory = $projectDir
     $sc.Description      = 'Contexts — launch UI and open browser'
-    $sc.WindowStyle      = 7   # minimized (hides wscript host briefly)
+    $sc.WindowStyle      = 7
     $sc.Save()
     Write-Host "Created: $LnkPath"
 }
 
 New-ContextsShortcut -LnkPath $desktopLnk
-New-ContextsShortcut -LnkPath $startupLnk
+
+if ($AutoStart) {
+    New-ContextsShortcut -LnkPath $startupLnk
+}
 
 Write-Host ''
 Write-Host 'Contexts is now installed.'
 Write-Host '  Desktop icon: double-click Contexts on your desktop'
-Write-Host '  Auto-start:   runs at next Windows login'
-Write-Host ''
-Write-Host "If you don't want auto-start, delete: $startupLnk"
+if ($AutoStart) {
+    Write-Host '  Auto-start:   runs at next Windows login'
+    Write-Host ''
+    Write-Host "To disable auto-start later, run: scripts\uninstall.ps1"
+} else {
+    Write-Host ''
+    Write-Host 'Auto-start at login is NOT enabled. To enable it, re-run with:'
+    Write-Host '  powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -AutoStart'
+}

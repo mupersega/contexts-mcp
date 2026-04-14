@@ -118,11 +118,10 @@ export function layout(title: string, body: string): string {
       border-bottom: 2px double var(--border-heavy); padding-bottom: 1rem; margin-bottom: 2rem;
       display: flex; align-items: center; justify-content: space-between; position: relative;
     }
-    header::before {
-      content: 'SYS.ACTIVE ░░░░░░░░░░░░░░░░░░░░';
+    .sys-bars {
       position: absolute; top: -1.5rem; right: 0;
       font-size: 0.65rem; color: var(--text-dim); letter-spacing: 0.1em;
-      font-family: 'IBM Plex Mono', monospace;
+      font-family: 'IBM Plex Mono', monospace; white-space: pre;
     }
     header h1 { font-size: 1.4rem; letter-spacing: 0.15em; }
     header h1 a { color: var(--text-bright); border-bottom: none; }
@@ -369,6 +368,7 @@ export function layout(title: string, body: string): string {
       text-align: center; font-size: 0.6rem; color: var(--text-dim);
       letter-spacing: 0.2em; text-transform: uppercase; font-family: 'IBM Plex Mono', monospace;
     }
+    .footer-shutdown { display: inline-block; margin: 0.5rem 0 0 0; }
 
     /* --- Scrollbar --- */
     ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -397,6 +397,7 @@ export function layout(title: string, body: string): string {
   <canvas id="noise-canvas"></canvas>
   <div class="container">
     <header>
+      <div class="sys-bars" id="sys-bars" aria-hidden="true">SYS.ACTIVE ░░░░░░░░░░░░░░░░░░░░</div>
       <h1><a href="/">Contexts</a></h1>
       <nav>
         <a href="/">All Contexts</a>
@@ -405,7 +406,10 @@ export function layout(title: string, body: string): string {
     </header>
     ${body}
     <footer class="classification-footer">
-      CONTEXT MANAGEMENT SYSTEM v1.1 &mdash; TERMINAL ${terminalId} &mdash; SESSION ACTIVE
+      <span id="footer-text">CONTEXT MANAGEMENT SYSTEM v1.1 &mdash; TERMINAL ${terminalId} &mdash; SESSION ACTIVE</span>
+      <form hx-post="/shutdown" hx-confirm="Shut down the Contexts UI server?" hx-target="#footer-text" hx-swap="outerHTML" class="footer-shutdown">
+        <button type="submit" class="btn btn-sm btn-danger">× Shutdown</button>
+      </form>
     </footer>
   </div>
   <script>
@@ -435,6 +439,35 @@ export function layout(title: string, body: string): string {
       ctx.putImageData(img, 0, 0);
     }
     requestAnimationFrame(frame);
+  })();
+  (function() {
+    var el = document.getElementById('sys-bars');
+    if (!el) return;
+    var N = 20;
+    var shades = [' ', '░', '▒', '▓', '█'];
+    var anchors = [];
+    for (var i = 0; i < 32; i++) anchors.push(Math.random());
+    function smooth(t) { return t * t * (3 - 2 * t); }
+    function sample(x) {
+      var i = Math.floor(x), f = x - i;
+      var a = anchors[((i) % 32 + 32) % 32];
+      var b = anchors[((i + 1) % 32 + 32) % 32];
+      return a + (b - a) * smooth(f);
+    }
+    var phase = 0, last = 0;
+    function bars(t) {
+      requestAnimationFrame(bars);
+      if (t - last < 120) return;
+      last = t;
+      phase += 0.04;
+      var out = '';
+      for (var i = 0; i < N; i++) {
+        var v = sample(i * 0.35 + phase);
+        out += shades[Math.min(shades.length - 1, Math.floor(v * shades.length))];
+      }
+      el.textContent = 'SYS.ACTIVE ' + out;
+    }
+    requestAnimationFrame(bars);
   })();
   </script>
 </body>

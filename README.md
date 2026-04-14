@@ -70,7 +70,29 @@ npm run ui
 # then open http://localhost:3141
 ```
 
-Windows-only convenience helpers (optional): `scripts/install.ps1` installs a Start Menu shortcut; `scripts/contexts-ui.vbs` launches the UI without a console window.
+Stop it with the **Shutdown** button in the footer — it POSTs to `/shutdown` and the server exits cleanly, releasing the port.
+
+### Windows convenience (optional)
+
+`scripts/install.ps1` creates a **Desktop** shortcut that launches the UI (via `scripts/contexts-ui.vbs`, which starts `node dist\web.js` hidden and opens the browser):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install.ps1
+```
+
+To also auto-start at Windows login, pass `-AutoStart`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -AutoStart
+```
+
+To remove the shortcuts later (including the Startup-folder one):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\uninstall.ps1
+```
+
+The uninstall script only removes shortcuts. If a server is already running, use the footer **Shutdown** button (or `taskkill`) to stop it.
 
 ## Data model — quick reference
 

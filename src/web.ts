@@ -275,6 +275,16 @@ app.get("/search", async (req, res) => {
   res.send(searchPage(results, q, context, contextNames));
 });
 
+// --- Shutdown ---
+
+app.post("/shutdown", (_req, res) => {
+  res.send(
+    `<span id="footer-text">SERVER TERMINATED &mdash; PORT ${PORT} RELEASED</span>`
+  );
+  // Flush the response before the process exits.
+  setTimeout(() => process.exit(0), 200);
+});
+
 // --- Start ---
 
 const PORT = parseInt(process.env.CONTEXTS_UI_PORT || "3141", 10);
