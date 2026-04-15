@@ -31,6 +31,18 @@ function escHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+// Custom fenced-code renderer: tag <pre> with data-lang so CSS can label it.
+marked.use({
+  renderer: {
+    code({ text, lang }: { text: string; lang?: string }) {
+      const language = (lang || "").trim().split(/\s+/)[0];
+      const langAttr = language ? ` data-lang="${escHtml(language)}"` : "";
+      const classAttr = language ? ` class="language-${escHtml(language)}"` : "";
+      return `<pre${langAttr}><code${classAttr}>${escHtml(text)}\n</code></pre>`;
+    },
+  },
+});
+
 function parseExtQuery(raw: unknown): ItemExtension | undefined {
   if (typeof raw !== "string" || raw.length === 0) return undefined;
   if ((ITEM_EXTENSIONS as readonly string[]).includes(raw)) {

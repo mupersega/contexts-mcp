@@ -199,3 +199,5 @@ export const SearchContextsArgsSchema = z.object({
     .optional()
     .describe("Only search contexts whose metadata tags include any of these"),
 });
+
+export const ContextMigrationBriefArgsSchema = z.object({});

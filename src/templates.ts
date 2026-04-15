@@ -47,8 +47,16 @@ export function layout(title: string, body: string): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="color-scheme" content="dark">
-  <style>html,body{background:#111;color:#ccc;}</style>
+  <meta name="color-scheme" content="dark light">
+  <script>
+  (function() {
+    try {
+      var t = localStorage.getItem('contexts-theme');
+      if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
+    } catch (e) {}
+  })();
+  </script>
+  <style>html,body{background:#111;color:#ccc;}html[data-theme="light"],html[data-theme="light"] body{background:#e8e0cc;color:#2a2824;}</style>
   <title>${esc(title)} - Contexts</title>
   <script src="https://unpkg.com/htmx.org@2.0.4"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -68,6 +76,39 @@ export function layout(title: string, body: string): string {
       --border: #444444; --border-heavy: #666666;
       --text: #cccccc; --text-muted: #777777; --text-bright: #e0e0e0; --text-dim: #555555;
       --tag-bg: #333333; --tag-text: #bbbbbb;
+      --accent: #4ade80; --accent-glow: #4ade80;
+      --accent-line: rgba(74,222,128,0.07); --accent-line-hover: rgba(74,222,128,0.6);
+      --selection-bg: #4ade80; --selection-text: #0a0a0a;
+      --body-bg: #111111;
+      --input-bg: #181818; --input-bg-focus: #1d1d1d;
+      --code-bg: #181818; --pre-bg: #141414; --table-stripe: #111111;
+      --hover-text: #ffffff;
+      --btn-shadow: #000000; --btn-primary-text: #000000;
+      --flash-success-bg: #1a1f1a; --flash-error-bg: #1f1a1a; --flash-error-border: #888888;
+      --scanline: rgba(0,0,0,0.04); --vignette: rgba(0,0,0,0.4);
+      --noise-blend: overlay; --noise-opacity: 0.5;
+      --container-shadow: rgba(0,0,0,0.3);
+      --sticky-header-h: 4.5rem;
+      --sticky-crumb-h: 2.25rem;
+    }
+
+    :root[data-theme="light"] {
+      --bg: #f5efe0; --surface: #ece5d3; --surface-raised: #e0d8c2;
+      --border: #bfb8a5; --border-heavy: #8a8470;
+      --text: #2a2824; --text-muted: #5a5647; --text-bright: #1a1814; --text-dim: #8a8470;
+      --tag-bg: #ddd5c0; --tag-text: #3a3830;
+      --accent: #2d7a3f; --accent-glow: #2d7a3f;
+      --accent-line: rgba(45,122,63,0.08); --accent-line-hover: rgba(45,122,63,0.5);
+      --selection-bg: #2d7a3f; --selection-text: #f5efe0;
+      --body-bg: #e8e0cc;
+      --input-bg: #f9f4e5; --input-bg-focus: #fdf9ec;
+      --code-bg: #e8e0cc; --pre-bg: #e0d8c2; --table-stripe: #ece5d3;
+      --hover-text: #1a1814;
+      --btn-shadow: #8a8470; --btn-primary-text: #f5efe0;
+      --flash-success-bg: #dce6d0; --flash-error-bg: #e6d5d0; --flash-error-border: #8a8470;
+      --scanline: rgba(58,50,32,0.022); --vignette: rgba(58,50,32,0.07);
+      --noise-blend: normal; --noise-opacity: 0;
+      --container-shadow: rgba(58,50,32,0.035);
     }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; border-radius: 0 !important; }
@@ -75,27 +116,31 @@ export function layout(title: string, body: string): string {
     body {
       font-family: 'IBM Plex Mono', 'Courier New', monospace;
       font-size: 14px; font-weight: 400; letter-spacing: 0.01em;
-      background: #111111; color: var(--text); line-height: 1.7;
+      background: var(--body-bg); color: var(--text); line-height: 1.7;
     }
 
     /* --- CRT Scanlines --- */
     body::before {
       content: ''; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.04) 2px, rgba(0,0,0,0.04) 4px);
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, var(--scanline) 2px, var(--scanline) 4px);
       pointer-events: none; z-index: 10000;
     }
 
     /* --- Vignette --- */
     body::after {
       content: ''; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-      background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.4) 100%);
+      background: radial-gradient(ellipse at center, transparent 60%, var(--vignette) 100%);
       pointer-events: none; z-index: 10001;
     }
 
     #noise-canvas {
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      pointer-events: none; z-index: 9999; opacity: 0.5; mix-blend-mode: overlay;
+      pointer-events: none; z-index: 9999; opacity: var(--noise-opacity); mix-blend-mode: var(--noise-blend);
     }
+    /* Light mode: disable the fixed noise canvas entirely.
+       mix-blend-mode on a position:fixed canvas triggers a Chromium repaint
+       bug where scrolling content leaves ghost trails in the blended region. */
+    :root[data-theme="light"] #noise-canvas { display: none; }
 
     h1, h2, h3, .card h3 {
       font-family: 'IBM Plex Mono', 'Courier New', monospace; font-weight: 600;
@@ -103,26 +148,36 @@ export function layout(title: string, body: string): string {
     }
 
     a { color: var(--text); text-decoration: none; border-bottom: 1px dotted var(--text-dim); transition: all 0.1s; }
-    a:hover { color: #ffffff; border-bottom-color: var(--text-muted); border-bottom-style: solid; }
+    a:hover { color: var(--hover-text); border-bottom-color: var(--text-muted); border-bottom-style: solid; }
 
     .container {
       max-width: 820px; margin: 0 auto; padding: 2rem 1.5rem;
       background: var(--bg); min-height: 100vh;
       border-left: 1px solid var(--border); border-right: 1px solid var(--border);
-      box-shadow: inset 0 0 80px rgba(0,0,0,0.3);
+      box-shadow: inset 0 0 80px var(--container-shadow);
       animation: screen-flicker 0.5s ease-out;
     }
 
     /* --- Header --- */
     header {
-      border-bottom: 2px double var(--border-heavy); padding-bottom: 1rem; margin-bottom: 2rem;
-      display: flex; align-items: center; justify-content: space-between; position: relative;
+      border-bottom: 2px double var(--border-heavy); padding: 1rem 0; margin-bottom: 1.5rem;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 30; background: var(--bg);
     }
     .sys-bars {
       position: absolute; top: -1.5rem; right: 0;
       font-size: 0.65rem; color: var(--text-dim); letter-spacing: 0.1em;
       font-family: 'IBM Plex Mono', monospace; white-space: pre;
     }
+    .sys-bars .hit { color: var(--accent); text-shadow: 0 0 3px var(--accent-glow); }
+    #theme-toggle {
+      margin-left: 0.75rem; background: transparent; border: none;
+      color: var(--text-muted); font-family: inherit; font-size: 1rem;
+      line-height: 1; padding: 0; cursor: pointer; vertical-align: middle;
+      transition: color 0.1s, transform 0.2s;
+    }
+    #theme-toggle:hover { color: var(--text-bright); }
+    :root[data-theme="light"] #theme-toggle { transform: rotate(180deg); }
     header h1 { font-size: 1.4rem; letter-spacing: 0.15em; }
     header h1 a { color: var(--text-bright); border-bottom: none; }
     header h1 a::before { content: '> '; color: var(--text-dim); font-family: 'IBM Plex Mono', monospace; }
@@ -147,20 +202,48 @@ export function layout(title: string, body: string): string {
 
     /* --- Cards --- */
     .card {
-      background: var(--surface); border: 1px solid var(--border);
-      border-left: 3px solid var(--border-heavy);
+      /* Zero-alpha scanline layer always present so the hover transitions
+         smoothly into a phosphor-green CRT texture. */
+      background:
+        repeating-linear-gradient(
+          0deg,
+          transparent 0px,
+          transparent 1px,
+          transparent 1px,
+          transparent 3px
+        ),
+        var(--surface);
+      border: 1px solid var(--border);
       padding: 1.25rem 1.25rem 1.25rem 1.5rem; margin-bottom: 1rem;
-      position: relative; transition: border-color 0.15s;
+      position: relative; transition: background 0.18s;
       animation: stamp-in 0.2s ease-out;
     }
     .card::before {
       content: '//'; position: absolute; top: 0.5rem; left: 0.4rem;
       font-size: 0.65rem; color: var(--text-dim); font-family: 'IBM Plex Mono', monospace;
     }
-    .card:hover { border-left-color: var(--text-muted); }
+    /* Only cards with a stretched title link (i.e. navigable ones) get the
+       hover affordance — the New Context form card is excluded. */
+    .card:has(h3 a):hover {
+      background:
+        repeating-linear-gradient(
+          0deg,
+          var(--accent-line) 0px,
+          var(--accent-line) 1px,
+          transparent 1px,
+          transparent 3px
+        ),
+        var(--surface);
+    }
+    .card:has(h3 a):hover h3 a { color: var(--hover-text); border-bottom-color: var(--accent-line-hover); }
     .card h3 { font-size: 1rem; margin-bottom: 0.25rem; }
     .card h3 a { color: var(--text-bright); border-bottom: 1px dotted var(--text-dim); }
-    .card h3 a:hover { color: #ffffff; border-bottom-color: var(--text-muted); }
+    /* Stretched-link pattern: title anchor's ::after anchors to .card (the
+       nearest positioned ancestor) and covers the whole card for click. */
+    .card h3 a::after { content: ''; position: absolute; inset: 0; z-index: 1; }
+    .card h3 a:hover { color: var(--hover-text); border-bottom-color: var(--text-muted); }
+    /* Keep interactive children above the stretched-link overlay. */
+    .card .btn, .card .ctx-link { position: relative; z-index: 2; }
     .card .meta {
       color: var(--text-dim); font-size: 0.75rem; margin-bottom: 0.5rem;
       text-transform: uppercase; letter-spacing: 0.05em;
@@ -231,22 +314,31 @@ export function layout(title: string, body: string): string {
     .ctx-link:hover { color: var(--text-bright); border-color: var(--text-bright); border-bottom-style: solid; }
     .ctx-meta-actions { margin-top: 0.75rem; }
 
+    .item-title-sticky {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      padding: 0.75rem 0; margin-bottom: 1rem;
+      border-bottom: 1px dotted var(--border);
+      position: sticky;
+      top: calc(var(--sticky-header-h) + var(--sticky-crumb-h));
+      z-index: 10; background: var(--bg);
+    }
+
     /* --- Buttons --- */
     .btn {
       display: inline-block; padding: 0.45rem 0.9rem;
       border: 1px solid var(--border-heavy); background: var(--surface); color: var(--text);
       cursor: pointer; font-size: 0.8rem; font-family: 'IBM Plex Mono', monospace;
       text-transform: uppercase; letter-spacing: 0.06em; text-decoration: none;
-      box-shadow: 2px 2px 0 #000000; transition: all 0.08s; border-bottom: 1px solid var(--border-heavy);
+      box-shadow: 2px 2px 0 var(--btn-shadow); transition: all 0.08s; border-bottom: 1px solid var(--border-heavy);
     }
     .btn:hover { background: var(--surface-raised); border-color: var(--text-muted); color: var(--text-bright); text-decoration: none; }
-    .btn:active { box-shadow: 0 0 0 #000; transform: translate(2px, 2px); }
-    .btn-primary { background: var(--text-bright); color: var(--bg); border-color: var(--text-bright); font-weight: 600; }
-    .btn-primary:hover { background: #ffffff; color: #000000; }
+    .btn:active { box-shadow: 0 0 0 var(--btn-shadow); transform: translate(2px, 2px); }
+    .btn-primary { background: var(--text-bright); color: var(--btn-primary-text); border-color: var(--text-bright); font-weight: 600; }
+    .btn-primary:hover { background: var(--hover-text); color: var(--btn-primary-text); }
     .btn-danger { color: var(--text-muted); border-color: var(--text-muted); border-style: dashed; }
     .btn-danger:hover { background: var(--text-bright); color: var(--bg); border-style: solid; }
-    .btn-sm { padding: 0.2rem 0.5rem; font-size: 0.7rem; box-shadow: 1px 1px 0 #000; }
-    .btn-sm:active { box-shadow: 0 0 0 #000; transform: translate(1px, 1px); }
+    .btn-sm { padding: 0.2rem 0.5rem; font-size: 0.7rem; box-shadow: 1px 1px 0 var(--btn-shadow); }
+    .btn-sm:active { box-shadow: 0 0 0 var(--btn-shadow); transform: translate(1px, 1px); }
 
     /* --- Forms --- */
     form { margin-bottom: 1rem; }
@@ -258,19 +350,22 @@ export function layout(title: string, body: string): string {
     input, textarea, select {
       width: 100%; padding: 0.5rem 0.75rem;
       border: 1px solid var(--border); border-bottom: 2px solid var(--border-heavy);
-      background: #181818; color: var(--text);
+      background: var(--input-bg); color: var(--text);
       font-family: 'IBM Plex Mono', monospace; font-size: 0.85rem;
       margin-bottom: 0.75rem; transition: border-color 0.15s;
     }
     textarea { min-height: 200px; resize: vertical; line-height: 1.8; }
     input:focus, textarea:focus, select:focus {
-      outline: none; border-color: var(--text-muted); border-bottom-color: var(--text-bright); background: #1d1d1d;
+      outline: none; border-color: var(--text-muted); border-bottom-color: var(--text-bright); background: var(--input-bg-focus);
     }
     input::placeholder, textarea::placeholder { color: var(--text-dim); font-style: italic; }
     select {
       -webkit-appearance: none; -moz-appearance: none; appearance: none;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8'%3E%3Cpath d='M0 2l4 4 4-4' fill='none' stroke='%23777' stroke-width='1.5'/%3E%3C/svg%3E");
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8'%3E%3Cpath d='M0 2l4 4 4-4' fill='none' stroke='%23777777' stroke-width='1.5'/%3E%3C/svg%3E");
       background-repeat: no-repeat; background-position: right 0.75rem center; padding-right: 2rem;
+    }
+    :root[data-theme="light"] select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8'%3E%3Cpath d='M0 2l4 4 4-4' fill='none' stroke='%235a5647' stroke-width='1.5'/%3E%3C/svg%3E");
     }
     .link-row { display: grid; grid-template-columns: 1fr 2fr; gap: 0.5rem; margin-bottom: 0.4rem; }
     .link-row input { margin-bottom: 0; }
@@ -291,7 +386,8 @@ export function layout(title: string, body: string): string {
     /* --- Breadcrumbs --- */
     .breadcrumb {
       font-size: 0.8rem; color: var(--text-dim); margin-bottom: 1rem;
-      padding-bottom: 0.5rem; border-bottom: 1px dotted var(--border); letter-spacing: 0.03em;
+      padding: 0.5rem 0; border-bottom: 1px dotted var(--border); letter-spacing: 0.03em;
+      position: sticky; top: var(--sticky-header-h); z-index: 20; background: var(--bg);
     }
     .breadcrumb a { color: var(--text-muted); border-bottom: none; }
     .breadcrumb a:hover { color: var(--text-bright); border-bottom: none; }
@@ -321,19 +417,37 @@ export function layout(title: string, body: string): string {
     .doc-content h1:first-child, .doc-content h2:first-child { margin-top: 0; }
     .doc-content p { margin-bottom: 0.75rem; }
     .doc-content code {
-      background: #181818; padding: 0.15rem 0.4rem; font-size: 0.85em;
+      background: var(--code-bg); padding: 0.15rem 0.4rem; font-size: 0.85em;
       border: 1px solid var(--border); font-family: 'IBM Plex Mono', monospace;
     }
     .doc-content pre {
-      background: #141414; padding: 1rem; overflow-x: auto; margin-bottom: 1rem;
+      background: var(--pre-bg); padding: 1rem; overflow-x: auto; margin-bottom: 1rem;
       border: 1px solid var(--border); border-left: 3px solid var(--border-heavy); position: relative;
     }
     .doc-content pre::before {
-      content: 'OUTPUT'; position: absolute; top: 0.25rem; right: 0.5rem;
+      content: 'CODE'; position: absolute; top: 0.25rem; right: 0.5rem;
       font-size: 0.6rem; color: var(--text-dim); letter-spacing: 0.1em;
-      font-family: 'IBM Plex Mono', monospace;
+      font-family: 'IBM Plex Mono', monospace; text-transform: uppercase;
     }
+    .doc-content pre[data-lang]::before { content: attr(data-lang); }
     .doc-content pre code { padding: 0; background: none; border: none; }
+    .doc-content table {
+      border-collapse: collapse; margin: 1rem 0; font-size: 0.85rem;
+      width: 100%; border: 1px solid var(--border);
+    }
+    .doc-content th, .doc-content td {
+      border: 1px solid var(--border); padding: 0.4rem 0.75rem;
+      text-align: left; vertical-align: top;
+    }
+    .doc-content thead th {
+      background: var(--code-bg); font-family: 'IBM Plex Mono', monospace;
+      text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.75rem;
+      color: var(--text-bright); border-bottom: 2px solid var(--border-heavy);
+    }
+    .doc-content tbody tr:nth-child(even) td { background: var(--table-stripe); }
+    .doc-content td code, .doc-content th code {
+      border: none; background: none; padding: 0; color: var(--text-bright);
+    }
     .doc-content ul, .doc-content ol { padding-left: 1.5rem; margin-bottom: 0.75rem; }
     .doc-content blockquote {
       border-left: 3px double var(--border-heavy); padding-left: 1rem;
@@ -346,7 +460,7 @@ export function layout(title: string, body: string): string {
 
     /* --- Search --- */
     .search-match {
-      background: #181818; padding: 0.5rem 0.75rem; font-size: 0.8rem;
+      background: var(--code-bg); padding: 0.5rem 0.75rem; font-size: 0.8rem;
       font-family: 'IBM Plex Mono', monospace; margin-top: 0.5rem;
       color: var(--text-muted); border-left: 2px solid var(--text-dim); position: relative;
     }
@@ -357,9 +471,9 @@ export function layout(title: string, body: string): string {
     /* --- Flash --- */
     .flash { padding: 0.75rem 1rem; margin-bottom: 1rem; border: 1px solid; font-size: 0.85rem; position: relative; padding-left: 2rem; }
     .flash::before { position: absolute; left: 0.75rem; font-weight: bold; }
-    .flash-success { background: #1a1f1a; border-color: var(--text-muted); color: var(--text); }
+    .flash-success { background: var(--flash-success-bg); border-color: var(--text-muted); color: var(--text); }
     .flash-success::before { content: '✓'; color: var(--text); }
-    .flash-error { background: #1f1a1a; border-color: #888888; color: var(--text); }
+    .flash-error { background: var(--flash-error-bg); border-color: var(--flash-error-border); color: var(--text); }
     .flash-error::before { content: '!'; color: var(--text-bright); }
 
     /* --- Footer --- */
@@ -369,6 +483,10 @@ export function layout(title: string, body: string): string {
       letter-spacing: 0.2em; text-transform: uppercase; font-family: 'IBM Plex Mono', monospace;
     }
     .footer-shutdown { display: inline-block; margin: 0.5rem 0 0 0; }
+
+    /* --- Selection --- */
+    ::selection { background: var(--selection-bg); color: var(--selection-text); text-shadow: none; }
+    ::-moz-selection { background: var(--selection-bg); color: var(--selection-text); text-shadow: none; }
 
     /* --- Scrollbar --- */
     ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -397,7 +515,7 @@ export function layout(title: string, body: string): string {
   <canvas id="noise-canvas"></canvas>
   <div class="container">
     <header>
-      <div class="sys-bars" id="sys-bars" aria-hidden="true">SYS.ACTIVE ░░░░░░░░░░░░░░░░░░░░</div>
+      <div class="sys-bars" id="sys-bars"><span aria-hidden="true">SYS.ACTIVE </span><span id="sys-bars-strip" aria-hidden="true">░░░░░░░░░░░░░░░░░░░░</span><button type="button" id="theme-toggle" aria-label="Toggle theme">◐</button></div>
       <h1><a href="/">Contexts</a></h1>
       <nav>
         <a href="/">All Contexts</a>
@@ -441,33 +559,68 @@ export function layout(title: string, body: string): string {
     requestAnimationFrame(frame);
   })();
   (function() {
-    var el = document.getElementById('sys-bars');
+    var el = document.getElementById('sys-bars-strip');
     if (!el) return;
     var N = 20;
-    var shades = [' ', '░', '▒', '▓', '█'];
-    var anchors = [];
-    for (var i = 0; i < 32; i++) anchors.push(Math.random());
-    function smooth(t) { return t * t * (3 - 2 * t); }
-    function sample(x) {
-      var i = Math.floor(x), f = x - i;
-      var a = anchors[((i) % 32 + 32) % 32];
-      var b = anchors[((i + 1) % 32 + 32) % 32];
-      return a + (b - a) * smooth(f);
+    // All Unicode block elements → guaranteed equal advance width in monospace,
+    // so the strip never jitters even as glyphs change.
+    // Only uniform-width shade blocks — ▁ etc. are NOT guaranteed equal advance
+    // and caused layout shift in IBM Plex Mono. These four are safe.
+    var shades = ['░', '▒', '▓', '█'];
+    var threads = [];
+    for (var i = 0; i < N; i++) {
+      threads.push({
+        v: 0,
+        decay: 0.00035 + Math.random() * 0.00065,     // fade over ~1.5–4 s
+        rate:  3000 + Math.random() * 15000,          // 3–18 s between pulses
+        next:  Math.random() * 10000,                 // stagger first pulses
+        hit:   false,
+      });
     }
-    var phase = 0, last = 0;
+    var start = 0, last = 0;
     function bars(t) {
       requestAnimationFrame(bars);
-      if (t - last < 120) return;
+      if (!start) { start = t; last = t; }
+      var dt = t - last;
+      if (dt < 180) return;
       last = t;
-      phase += 0.04;
+      var elapsed = t - start;
+      for (var i = 0; i < N; i++) {
+        var th = threads[i];
+        th.v -= th.decay * dt;
+        if (th.v <= 0) { th.v = 0; th.hit = false; }
+        if (elapsed >= th.next) {
+          th.v = 0.35 + Math.random() * 0.65;
+          th.hit = Math.random() < 0.04;              // ~4% of pulses glow green → one every ~12 s
+          th.next = elapsed + th.rate * (0.5 + Math.random() * 1.0);
+        }
+      }
       var out = '';
       for (var i = 0; i < N; i++) {
-        var v = sample(i * 0.35 + phase);
-        out += shades[Math.min(shades.length - 1, Math.floor(v * shades.length))];
+        var th = threads[i];
+        var ch = shades[Math.min(3, Math.floor(th.v * 4))];
+        out += th.hit && th.v > 0.01 ? '<span class="hit">' + ch + '</span>' : ch;
       }
-      el.textContent = 'SYS.ACTIVE ' + out;
+      el.innerHTML = out;
     }
     requestAnimationFrame(bars);
+  })();
+  (function() {
+    var btn = document.getElementById('theme-toggle');
+    if (!btn) return;
+    var root = document.documentElement;
+    function render() {
+      var light = root.getAttribute('data-theme') === 'light';
+      btn.setAttribute('aria-label', light ? 'Switch to dark mode' : 'Switch to light mode');
+    }
+    render();
+    btn.addEventListener('click', function() {
+      var next = root.getAttribute('data-theme') === 'light' ? null : 'light';
+      if (next) root.setAttribute('data-theme', next);
+      else root.removeAttribute('data-theme');
+      try { localStorage.setItem('contexts-theme', next || 'dark'); } catch (e) {}
+      render();
+    });
   })();
   </script>
 </body>
@@ -671,7 +824,7 @@ export function itemViewPage(
     <div class="breadcrumb">
       <a href="/">Contexts</a> / <a href="/ctx/${esc(context)}">${esc(context)}</a> / <strong>${esc(name)}.${esc(extension)}</strong>
     </div>
-    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1rem;">
+    <div class="item-title-sticky">
       <div>
         <h2><span class="item-kind">${extension.toUpperCase()}</span>${esc(title)}</h2>
         <div class="meta" style="color:var(--text-muted); font-size:0.85rem;">

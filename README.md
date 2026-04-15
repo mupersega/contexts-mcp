@@ -104,7 +104,7 @@ The uninstall script only removes shortcuts. If a server is already running, use
 
 ## MCP tools
 
-All 12 tools the server exposes:
+All 13 tools the server exposes:
 
 - `list_contexts` — list all context folders; `include_metadata=true` also returns each context's title/description/status/tags/links.
 - `create_context` — create a new named context folder.
@@ -118,6 +118,7 @@ All 12 tools the server exposes:
 - `append_to_item` — append to an existing md/txt/csv item. Errors on json/yaml/yml.
 - `delete_item` — delete a single item (destructive).
 - `search_contexts` — full-text search across all items, with optional filters by context, per-item tags, context status, or context tags.
+- `context_migration_brief` — returns a markdown guide covering formats, naming rules, frontmatter shape, and a recommended workflow for importing existing notes into the server.
 
 ---
 

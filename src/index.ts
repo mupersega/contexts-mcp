@@ -15,6 +15,7 @@ import {
   AppendToItemArgsSchema,
   DeleteItemArgsSchema,
   SearchContextsArgsSchema,
+  ContextMigrationBriefArgsSchema,
 } from "./types.js";
 import * as storage from "./storage.js";
 import { searchContexts } from "./search.js";
@@ -37,6 +38,65 @@ const server = new McpServer(
 
 const text = (value: string) => ({ content: [{ type: "text" as const, text: value }] });
 const json = (value: unknown) => text(JSON.stringify(value, null, 2));
+
+const MIGRATION_BRIEF = `# Migrating existing markdown into contexts-mcp
+
+## What this system is
+A **context** is a folder. An **item** is a single file inside that folder. Items can be: \`md\` (default), \`txt\`, \`json\`, \`yaml\`, \`yml\`, or \`csv\`. Contexts are flat — no subfolders of items. A context may also carry its own metadata in a reserved \`_context.yaml\` file (never exposed as an item).
+
+## Naming rules
+- **Context name**: \`/^[a-zA-Z0-9_-]+$/\` — letters, digits, hyphens, underscores. Examples: \`auth-rewrite\`, \`postgres_notes\`, \`2026-q2-planning\`.
+- **Item base name**: \`/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/\` — must **start** with a letter or digit (blocks reserved names like \`_context\`). Pass the base name without the extension; pass \`extension\` separately.
+- No spaces, dots, or slashes in either name. Rename source files before importing, or map them during migration.
+
+## Markdown frontmatter shape
+Markdown items carry YAML frontmatter:
+
+\`\`\`yaml
+---
+title: Human-readable title
+tags: [alpha, beta]
+created: 2026-04-15T...
+updated: 2026-04-15T...
+---
+body goes here
+\`\`\`
+
+\`title\` and \`tags\` are yours to set; \`created\`/\`updated\` are managed automatically. If your source markdown already has frontmatter with other fields, they'll be preserved but only the four above are surfaced in listings and search.
+
+## Non-markdown items
+\`txt\`, \`json\`, \`yaml\`, \`yml\`, \`csv\` have **no frontmatter** — only filesystem metadata (name, size, ctime/mtime). If you want rich metadata on a structured payload, drop a companion \`.md\` next to it in the same context.
+
+## \`_context.yaml\` (context-level metadata)
+Optional per-context metadata. All fields optional:
+
+\`\`\`yaml
+title: Auth rewrite
+description: Migration off the old middleware
+status: in-progress    # free-form — "archived", "active", "draft", whatever
+tags: [backend, auth]
+links:
+  - label: Tracking issue
+    url: https://...
+\`\`\`
+
+## Recommended migration workflow
+1. **Survey first.** Call \`list_contexts\` with \`include_metadata: true\` to see what contexts already exist. Avoid creating parallel contexts for the same topic.
+2. **Search before writing.** Before importing a file, call \`search_contexts\` on a key phrase — you may find an existing item to **append to** rather than duplicate.
+3. **Group by topic, not by source directory.** One context = one coherent topic or unit of work. A folder of 30 loose notes about the same subsystem should usually become **one context with 30 items**, not 30 contexts.
+4. **Use \`create_item\` per source file.** Pass the body as \`content\`; set \`title\` and \`tags\` from your source frontmatter or infer from the filename. Default extension is \`md\`.
+5. **Prefer \`append_to_item\` for growth.** Contexts work best as growing logs — new findings append onto an existing item rather than creating item #7 on the same sub-topic.
+6. **Set \`_context.yaml\` last.** After items land, call \`update_context_metadata\` to give the context a title, description, status, and tags.
+
+## Gotchas
+- \`append_to_item\` is **disabled** for \`json\`/\`yaml\`/\`yml\` — silently corrupting structured data is worse than erroring. Use \`update_item\` to replace the full payload.
+- When two items share a base name across different extensions (\`notes.md\` and \`notes.txt\`), pass \`extension\` to disambiguate; otherwise \`md\` wins.
+- Storage path is \`contexts-data/\` relative to the server, or \`$CONTEXTS_DATA_DIR\` if set. Migrating? Point that env var at your target before starting.
+- File renames to fit the regex should happen in a preprocessing pass — the server rejects invalid names at the Zod boundary.
+
+## Suggested tool sequence for a batch import
+\`list_contexts\` → (for each source file) \`search_contexts\` to check for duplicates → \`create_context\` if new topic → \`create_item\` or \`append_to_item\` → \`update_context_metadata\` once items are in.
+`;
 
 server.registerTool(
   "list_contexts",
@@ -206,6 +266,16 @@ server.registerTool(
     await storage.deleteItem(args.context, args.item, args.extension);
     return text(`Item '${args.item}' deleted.`);
   }
+);
+
+server.registerTool(
+  "context_migration_brief",
+  {
+    description:
+      "Return a guide explaining how to migrate existing markdown (and other text files) into this contexts-mcp server. Covers supported formats, naming rules, markdown frontmatter shape, _context.yaml metadata, recommended migration workflow, and common gotchas. Call this when a user wants to import an existing corpus of notes or docs into contexts.",
+    inputSchema: ContextMigrationBriefArgsSchema.shape,
+  },
+  async () => text(MIGRATION_BRIEF)
 );
 
 server.registerTool(
