@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import matter from "gray-matter";
 import yaml from "js-yaml";
+import { loadConfig, packageVersion } from "./config.js";
 import {
   CONTEXT_META_FILENAME,
   CONTEXT_NAME_REGEX,
@@ -16,12 +17,42 @@ import {
   ItemInfo,
 } from "./types.js";
 
-const DATA_DIR =
-  process.env.CONTEXTS_DATA_DIR ||
-  path.join(process.cwd(), "contexts-data");
+// Lazy + memoized — avoids throwing MissingDataDirError at module load time so
+// unit tests and the setup CLI can import storage without a config present.
+let _cachedDataDir: string | null = null;
+function dataDir(): string {
+  if (_cachedDataDir) return _cachedDataDir;
+  _cachedDataDir = loadConfig().dataDir;
+  return _cachedDataDir;
+}
 
 export function getDataDir(): string {
-  return DATA_DIR;
+  return dataDir();
+}
+
+// Test / setup CLI hook — storage queries loadConfig() once, so if the config
+// file is rewritten after startup we need a way to bust the cache.
+export function resetDataDirCache(): void {
+  _cachedDataDir = null;
+}
+
+export const VERSION_STAMP_FILENAME = ".contexts-mcp-version";
+
+// --- Atomic write ---
+
+// tmp+rename guards against partial writes corrupting _context.yaml or an item
+// file if the process is killed mid-write. On POSIX rename is atomic; on NTFS
+// it's atomic within the same volume, which is the case here since tmp sits
+// next to the target.
+async function writeFileAtomic(filePath: string, content: string): Promise<void> {
+  const tmp = `${filePath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  try {
+    await fs.writeFile(tmp, content, "utf-8");
+    await fs.rename(tmp, filePath);
+  } catch (err) {
+    await fs.rm(tmp, { force: true }).catch(() => {});
+    throw err;
+  }
 }
 
 // --- Path safety ---
@@ -40,7 +71,7 @@ function assertWithin(base: string, resolved: string, label: string): void {
 }
 
 function resolveContextPath(contextName: string): string {
-  const baseResolved = path.resolve(DATA_DIR);
+  const baseResolved = path.resolve(dataDir());
   const resolved = path.resolve(baseResolved, contextName);
   assertWithin(baseResolved, resolved, "context name");
   return resolved;
@@ -78,6 +109,8 @@ interface ParsedItemFilename {
 // Returns null for unsupported files and for the reserved _context.yaml.
 function splitItemFilename(filename: string): ParsedItemFilename | null {
   if (filename === CONTEXT_META_FILENAME) return null;
+  if (filename === VERSION_STAMP_FILENAME) return null;
+  if (filename.startsWith(".")) return null;
   const dotIdx = filename.lastIndexOf(".");
   if (dotIdx <= 0) return null;
   const base = filename.slice(0, dotIdx);
@@ -87,10 +120,47 @@ function splitItemFilename(filename: string): ParsedItemFilename | null {
   return { base, ext };
 }
 
+export function contentTypeFor(ext: ItemExtension): string {
+  switch (ext) {
+    case "md":
+      return "text/markdown; charset=utf-8";
+    case "json":
+      return "application/json; charset=utf-8";
+    case "yaml":
+    case "yml":
+      return "application/yaml; charset=utf-8";
+    case "csv":
+      return "text/csv; charset=utf-8";
+    case "sql":
+      return "application/sql; charset=utf-8";
+    case "txt":
+    default:
+      return "text/plain; charset=utf-8";
+  }
+}
+
 // --- Init ---
 
 export async function ensureDataDir(): Promise<void> {
-  await fs.mkdir(DATA_DIR, { recursive: true });
+  const dd = dataDir();
+  await fs.mkdir(dd, { recursive: true });
+
+  // Stamp the data dir with the server version on first write. Future versions
+  // can read this to decide whether to migrate or refuse to start. Today we
+  // just ensure the stamp exists — no migration logic yet.
+  const stampPath = path.join(dd, VERSION_STAMP_FILENAME);
+  try {
+    const existing = await fs.readFile(stampPath, "utf-8");
+    if (!existing.trim()) {
+      await writeFileAtomic(stampPath, `${packageVersion()}\n`);
+    }
+  } catch (err: unknown) {
+    if (err && typeof err === "object" && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") {
+      await writeFileAtomic(stampPath, `${packageVersion()}\n`);
+    } else {
+      throw err;
+    }
+  }
 }
 
 // --- Context metadata ---
@@ -128,6 +198,7 @@ function normalizeContextMetadata(raw: unknown): ContextMetadata {
   }
   if (typeof r.created === "string") meta.created = r.created;
   if (typeof r.updated === "string") meta.updated = r.updated;
+  if (typeof r.last_activity === "string") meta.last_activity = r.last_activity;
 
   return meta;
 }
@@ -156,12 +227,10 @@ async function writeContextMetadata(
   meta: ContextMetadata
 ): Promise<void> {
   const metaPath = resolveContextMetaPath(name);
-  // Make sure the context directory exists — fail loudly if not.
   await fs.access(resolveContextPath(name)).catch(() => {
     throw new Error(`Context '${name}' not found`);
   });
 
-  // Consistent key order when writing.
   const ordered: Record<string, unknown> = {};
   if (meta.title !== undefined) ordered.title = meta.title;
   if (meta.description !== undefined) ordered.description = meta.description;
@@ -170,21 +239,21 @@ async function writeContextMetadata(
   ordered.links = meta.links;
   if (meta.created) ordered.created = meta.created;
   if (meta.updated) ordered.updated = meta.updated;
+  if (meta.last_activity) ordered.last_activity = meta.last_activity;
 
   const out = yaml.dump(ordered, { sortKeys: false, lineWidth: 100, noRefs: true });
-  await fs.writeFile(metaPath, out, "utf-8");
+  await writeFileAtomic(metaPath, out);
 }
 
 export async function updateContextMetadata(
   name: string,
-  patch: Partial<Omit<ContextMetadata, "created" | "updated">>
+  patch: Partial<Omit<ContextMetadata, "created" | "updated" | "last_activity">>
 ): Promise<ContextMetadata> {
   const existing = await getContextMetadata(name);
   const now = new Date().toISOString();
 
   const merged: ContextMetadata = {
     ...existing,
-    // Only patch keys that were explicitly provided.
     ...(patch.title !== undefined ? { title: patch.title } : {}),
     ...(patch.description !== undefined ? { description: patch.description } : {}),
     ...(patch.status !== undefined ? { status: patch.status } : {}),
@@ -192,33 +261,96 @@ export async function updateContextMetadata(
     ...(patch.links !== undefined ? { links: patch.links } : {}),
     created: existing.created || now,
     updated: now,
+    last_activity: now,
   };
 
   await writeContextMetadata(name, merged);
   return merged;
 }
 
+// Bump last_activity on any item mutation. Idempotent against missing
+// _context.yaml — creates a minimal metadata file on first touch.
+async function touchContext(name: string): Promise<void> {
+  const existing = await getContextMetadata(name);
+  const now = new Date().toISOString();
+  const merged: ContextMetadata = {
+    ...existing,
+    created: existing.created || now,
+    updated: existing.updated || now,
+    last_activity: now,
+  };
+  await writeContextMetadata(name, merged);
+}
+
 // --- Context operations ---
 
-export async function listContexts(
-  includeMetadata = false
-): Promise<ContextSummary[]> {
-  await ensureDataDir();
-  const entries = await fs.readdir(DATA_DIR, { withFileTypes: true });
-  const names = entries.filter((e) => e.isDirectory()).map((e) => e.name);
+export interface ListContextsOptions {
+  includeMetadata?: boolean;
+  sort?: "name" | "recent_activity" | "created" | "updated";
+  includeArchived?: boolean;
+}
 
-  if (!includeMetadata) {
-    return names.map((name) => ({ name }));
+function isArchived(meta: ContextMetadata | undefined): boolean {
+  return !!meta && meta.status === "archived";
+}
+
+function sortSummaries(
+  summaries: ContextSummary[],
+  sort: NonNullable<ListContextsOptions["sort"]>
+): void {
+  if (sort === "name") {
+    summaries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    return;
   }
+  // For time-based sorts, most-recent-first. Missing values sink.
+  const key: keyof ContextMetadata =
+    sort === "recent_activity" ? "last_activity" : sort;
+  summaries.sort((a, b) => {
+    const av = (a.metadata?.[key] as string | undefined) || "";
+    const bv = (b.metadata?.[key] as string | undefined) || "";
+    if (av === bv) return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+    if (!av) return 1;
+    if (!bv) return -1;
+    return av < bv ? 1 : -1;
+  });
+}
+
+export async function listContexts(
+  opts: ListContextsOptions | boolean = {}
+): Promise<ContextSummary[]> {
+  // Back-compat: legacy signature is listContexts(includeMetadata: boolean)
+  const options: ListContextsOptions =
+    typeof opts === "boolean" ? { includeMetadata: opts } : opts;
+  const sort = options.sort || "name";
+  const includeArchived = options.includeArchived === true;
+  // Any non-name sort, or an archived filter, requires metadata reads.
+  const needMeta =
+    options.includeMetadata === true || sort !== "name" || !includeArchived;
+
+  await ensureDataDir();
+  const entries = await fs.readdir(dataDir(), { withFileTypes: true });
+  const names = entries.filter((e) => e.isDirectory()).map((e) => e.name);
 
   const summaries: ContextSummary[] = [];
   for (const name of names) {
-    try {
-      const metadata = await getContextMetadata(name);
-      summaries.push({ name, metadata });
-    } catch {
-      summaries.push({ name, metadata: defaultContextMetadata() });
+    if (!needMeta) {
+      summaries.push({ name });
+      continue;
     }
+    let metadata: ContextMetadata;
+    try {
+      metadata = await getContextMetadata(name);
+    } catch {
+      metadata = defaultContextMetadata();
+    }
+    if (!includeArchived && isArchived(metadata)) continue;
+    summaries.push({ name, metadata });
+  }
+
+  sortSummaries(summaries, sort);
+
+  if (options.includeMetadata !== true) {
+    return summaries.map((s) => ({ name: s.name }));
   }
   return summaries;
 }
@@ -236,6 +368,7 @@ export async function createContext(name: string): Promise<void> {
   } catch (err: unknown) {
     if (err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") {
       await fs.mkdir(dir, { recursive: true });
+      await touchContext(name);
       return;
     }
     throw err;
@@ -289,11 +422,9 @@ async function findItemExtension(
     throw new Error(`Item '${base}' not found in context '${context}'`);
   }
 
-  // Prefer md, otherwise first hit in ITEM_EXTENSIONS order.
   return found.includes("md") ? "md" : found[0];
 }
 
-// Windows reports birthtime reliably; elsewhere we fall back to ctime if zero.
 function statCreatedISO(stat: { birthtime: Date; ctime: Date }): string {
   const bt = stat.birthtime;
   if (bt && bt.getTime() > 0) return bt.toISOString();
@@ -312,7 +443,7 @@ export async function listItems(context: string): Promise<ItemInfo[]> {
   const items: ItemInfo[] = [];
   for (const entry of entries) {
     const parsed = splitItemFilename(entry);
-    if (!parsed) continue; // skips _context.yaml and unsupported files
+    if (!parsed) continue;
 
     const filePath = path.join(dir, entry);
     const stat = await fs.stat(filePath);
@@ -344,7 +475,6 @@ export async function listItems(context: string): Promise<ItemInfo[]> {
     }
   }
 
-  // Updated desc, then name asc.
   items.sort((a, b) => {
     if (a.updated !== b.updated) return a.updated < b.updated ? 1 : -1;
     return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
@@ -394,6 +524,40 @@ export async function getItem(
   };
 }
 
+export interface RawItem {
+  name: string;
+  extension: ItemExtension;
+  filename: string;
+  contentType: string;
+  content: string;
+  size: number;
+}
+
+// Full, byte-for-byte content of an item as stored on disk — including YAML
+// frontmatter for markdown. Distinct from getItem(), which strips frontmatter
+// from md and returns it as a separate field. Used by the UI's Download button
+// and by the `get_item_raw` MCP tool.
+export async function getItemRaw(
+  context: string,
+  base: string,
+  preferred?: ItemExtension
+): Promise<RawItem> {
+  const ext = await findItemExtension(context, base, preferred);
+  const filePath = resolveItemPath(context, base, ext);
+  const [raw, stat] = await Promise.all([
+    fs.readFile(filePath, "utf-8"),
+    fs.stat(filePath),
+  ]);
+  return {
+    name: base,
+    extension: ext,
+    filename: `${base}.${ext}`,
+    contentType: contentTypeFor(ext),
+    content: raw,
+    size: stat.size,
+  };
+}
+
 export async function createItem(
   context: string,
   base: string,
@@ -405,7 +569,6 @@ export async function createItem(
       `Invalid item name '${base}': must start with alphanumeric, letters/digits/hyphens/underscores only`
     );
   }
-  // Defense in depth against reserved filename even though the regex blocks leading underscore.
   if (`${base}.${ext}` === CONTEXT_META_FILENAME) {
     throw new Error(`Reserved filename: '${CONTEXT_META_FILENAME}'`);
   }
@@ -436,11 +599,11 @@ export async function createItem(
           updated: now,
         };
         const output = matter.stringify(opts.content || "", frontmatter);
-        await fs.writeFile(filePath, output, "utf-8");
+        await writeFileAtomic(filePath, output);
       } else {
-        // Non-md: ignore title/tags.
-        await fs.writeFile(filePath, opts.content || "", "utf-8");
+        await writeFileAtomic(filePath, opts.content || "");
       }
+      await touchContext(context);
       return;
     }
     throw err;
@@ -472,11 +635,11 @@ export async function updateItem(
 
     const body = updates.content !== undefined ? updates.content : parsed.content;
     const output = matter.stringify(body, meta);
-    await fs.writeFile(filePath, output, "utf-8");
+    await writeFileAtomic(filePath, output);
+    await touchContext(context);
     return;
   }
 
-  // Non-markdown: content is the only updatable field.
   if (updates.title !== undefined || updates.tags !== undefined) {
     throw new Error(
       `title/tags are not supported on non-markdown items (kind: ${ext})`
@@ -485,7 +648,8 @@ export async function updateItem(
   if (updates.content === undefined) {
     throw new Error(`No content provided to update '${base}.${ext}'`);
   }
-  await fs.writeFile(filePath, updates.content, "utf-8");
+  await writeFileAtomic(filePath, updates.content);
+  await touchContext(context);
 }
 
 export async function appendToItem(
@@ -512,14 +676,15 @@ export async function appendToItem(
 
     const body = parsed.content + "\n\n" + newContent;
     const output = matter.stringify(body, meta);
-    await fs.writeFile(filePath, output, "utf-8");
+    await writeFileAtomic(filePath, output);
+    await touchContext(context);
     return;
   }
 
-  // txt / csv: simple textual append.
   const existing = await fs.readFile(filePath, "utf-8").catch(() => "");
   const sep = existing.length === 0 || existing.endsWith("\n") ? "" : "\n";
-  await fs.writeFile(filePath, existing + sep + newContent, "utf-8");
+  await writeFileAtomic(filePath, existing + sep + newContent);
+  await touchContext(context);
 }
 
 export async function deleteItem(
@@ -529,10 +694,71 @@ export async function deleteItem(
 ): Promise<void> {
   const ext = await findItemExtension(context, base, preferred);
   const filePath = resolveItemPath(context, base, ext);
-  // resolveItemPath can never produce the _context.yaml path (it always
-  // appends a whitelisted extension), so this is safe against accidental
-  // deletion of the metadata file.
   await fs.rm(filePath);
+  await touchContext(context).catch(() => {
+    // If _context.yaml write fails after item delete, don't fail the delete.
+  });
+}
+
+// --- Diagnostics ---
+
+export interface Diagnostics {
+  dataDir: string;
+  configPath: string;
+  version: string;
+  contextCount: number;
+  archivedCount: number;
+  itemCount: number;
+  totalBytes: number;
+  lastScanMs: number;
+}
+
+export async function getDiagnostics(): Promise<Diagnostics> {
+  const cfg = loadConfig();
+  const start = Date.now();
+  await ensureDataDir();
+  const entries = await fs.readdir(cfg.dataDir, { withFileTypes: true });
+  const ctxNames = entries.filter((e) => e.isDirectory()).map((e) => e.name);
+
+  let archivedCount = 0;
+  let itemCount = 0;
+  let totalBytes = 0;
+
+  for (const name of ctxNames) {
+    let meta: ContextMetadata | null = null;
+    try {
+      meta = await getContextMetadata(name);
+    } catch {
+      meta = null;
+    }
+    if (isArchived(meta || undefined)) archivedCount += 1;
+
+    let ents: string[];
+    try {
+      ents = await fs.readdir(path.join(cfg.dataDir, name));
+    } catch {
+      continue;
+    }
+    for (const ent of ents) {
+      const parsed = splitItemFilename(ent);
+      if (!parsed) continue;
+      const st = await fs.stat(path.join(cfg.dataDir, name, ent)).catch(() => null);
+      if (!st || !st.isFile()) continue;
+      itemCount += 1;
+      totalBytes += st.size;
+    }
+  }
+
+  return {
+    dataDir: cfg.dataDir,
+    configPath: cfg.configPath,
+    version: packageVersion(),
+    contextCount: ctxNames.length,
+    archivedCount,
+    itemCount,
+    totalBytes,
+    lastScanMs: Date.now() - start,
+  };
 }
 
 // --- Re-exports for convenience ---

@@ -2,7 +2,7 @@ import { z } from "zod";
 
 // --- Constants ---
 
-export const ITEM_EXTENSIONS = ["md", "txt", "json", "yaml", "yml", "csv"] as const;
+export const ITEM_EXTENSIONS = ["md", "txt", "json", "yaml", "yml", "csv", "sql"] as const;
 export type ItemExtension = (typeof ITEM_EXTENSIONS)[number];
 
 export const CONTEXT_META_FILENAME = "_context.yaml";
@@ -29,6 +29,9 @@ export interface ContextMetadata {
   links: ContextLink[];
   created: string;
   updated: string;
+  // ISO timestamp of the last item-level mutation (create/update/append/delete).
+  // Bumped by storage automatically; callers never set this directly.
+  last_activity?: string;
 }
 
 export interface ContextSummary {
@@ -87,7 +90,16 @@ export const ContextMetadataSchema = z.object({
   links: z.array(ContextLinkSchema).default([]),
   created: z.string().optional(),
   updated: z.string().optional(),
+  last_activity: z.string().optional(),
 });
+
+export const ListContextsSortSchema = z.enum([
+  "name",
+  "recent_activity",
+  "created",
+  "updated",
+]);
+export type ListContextsSort = z.infer<typeof ListContextsSortSchema>;
 
 // --- Tool input schemas ---
 
@@ -96,7 +108,16 @@ export const ListContextsArgsSchema = z.object({
     .boolean()
     .optional()
     .default(false)
-    .describe("If true, also return title, description, status, tags, and links for each context. Slightly slower."),
+    .describe("If true, also return title, description, status, tags, links, and last_activity for each context. Slightly slower."),
+  sort: ListContextsSortSchema
+    .optional()
+    .default("name")
+    .describe("Sort order. 'name' (default, alphabetical) or 'recent_activity' | 'created' | 'updated' (most-recent first)."),
+  include_archived: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("If false (default), contexts with status='archived' are filtered out. Set true to include them."),
 });
 
 export const CreateContextArgsSchema = z.object({
@@ -198,6 +219,21 @@ export const SearchContextsArgsSchema = z.object({
     .array(z.string())
     .optional()
     .describe("Only search contexts whose metadata tags include any of these"),
+  include_archived: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("If false (default), contexts with status='archived' are skipped. Set true to include them."),
 });
+
+export const GetItemRawArgsSchema = z.object({
+  context: z.string().describe("Name of the context folder"),
+  item: z.string().describe("Item base name (without extension)"),
+  extension: ItemExtensionSchema
+    .optional()
+    .describe("Optional extension disambiguator if two items share a base name"),
+});
+
+export const ContextDiagnoseArgsSchema = z.object({});
 
 export const ContextMigrationBriefArgsSchema = z.object({});
