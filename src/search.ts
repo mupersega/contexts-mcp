@@ -1,14 +1,8 @@
 import fs from "fs/promises";
 import path from "path";
 import matter from "gray-matter";
-import yaml from "js-yaml";
-import {
-  CONTEXT_META_FILENAME,
-  ContextMetadata,
-  ITEM_EXTENSIONS,
-  ITEM_NAME_REGEX,
-  ItemExtension,
-} from "./types.js";
+import { ContextMetadata, ItemExtension } from "./types.js";
+import { getContextMetadata, splitItemFilename } from "./storage.js";
 
 export interface SearchResult {
   context: string;
@@ -24,52 +18,9 @@ export interface SearchOptions {
   tagFilter?: string[];
   contextStatus?: string;
   contextTagFilter?: string[];
-}
-
-function splitItemFilename(filename: string): { base: string; ext: ItemExtension } | null {
-  if (filename === CONTEXT_META_FILENAME) return null;
-  const dotIdx = filename.lastIndexOf(".");
-  if (dotIdx <= 0) return null;
-  const base = filename.slice(0, dotIdx);
-  const ext = filename.slice(dotIdx + 1);
-  if (!(ITEM_EXTENSIONS as readonly string[]).includes(ext)) return null;
-  if (!ITEM_NAME_REGEX.test(base)) return null;
-  return { base, ext: ext as ItemExtension };
-}
-
-async function readContextMetadata(
-  dataDir: string,
-  ctx: string
-): Promise<ContextMetadata | null> {
-  const metaPath = path.join(dataDir, ctx, CONTEXT_META_FILENAME);
-  try {
-    const raw = await fs.readFile(metaPath, "utf-8");
-    const parsed = yaml.load(raw);
-    if (!parsed || typeof parsed !== "object") return null;
-    const r = parsed as Record<string, unknown>;
-    return {
-      title: typeof r.title === "string" ? r.title : undefined,
-      description: typeof r.description === "string" ? r.description : undefined,
-      status: typeof r.status === "string" ? r.status : undefined,
-      tags: Array.isArray(r.tags)
-        ? r.tags.filter((t): t is string => typeof t === "string")
-        : [],
-      links: Array.isArray(r.links)
-        ? (r.links as unknown[]).flatMap((l) =>
-            l &&
-            typeof l === "object" &&
-            typeof (l as { label?: unknown }).label === "string" &&
-            typeof (l as { url?: unknown }).url === "string"
-              ? [{ label: (l as { label: string }).label, url: (l as { url: string }).url }]
-              : []
-          )
-        : [],
-      created: typeof r.created === "string" ? r.created : "",
-      updated: typeof r.updated === "string" ? r.updated : "",
-    };
-  } catch {
-    return null;
-  }
+  // Default behavior is to skip contexts whose metadata.status === 'archived'.
+  // Callers opt in to include them.
+  includeArchived?: boolean;
 }
 
 export async function searchContexts(
@@ -90,15 +41,23 @@ export async function searchContexts(
 
   const filterByStatus = opts.contextStatus !== undefined;
   const filterByContextTags = opts.contextTagFilter && opts.contextTagFilter.length > 0;
+  const includeArchived = opts.includeArchived === true;
   const contextStatusLower = opts.contextStatus?.toLowerCase();
   const contextTagsLower = opts.contextTagFilter?.map((t) => t.toLowerCase());
+
+  const needsMeta = filterByStatus || filterByContextTags || !includeArchived;
 
   for (const ctx of contexts) {
     const ctxPath = path.join(dataDir, ctx);
 
-    // Context-level metadata filters.
-    if (filterByStatus || filterByContextTags) {
-      const meta = await readContextMetadata(dataDir, ctx);
+    if (needsMeta) {
+      let meta: ContextMetadata | null = null;
+      try {
+        meta = await getContextMetadata(ctx);
+      } catch {
+        meta = null;
+      }
+      if (!includeArchived && meta && meta.status === "archived") continue;
       if (filterByStatus) {
         if (!meta || !meta.status || meta.status.toLowerCase() !== contextStatusLower) {
           continue;
@@ -144,10 +103,8 @@ export async function searchContexts(
         }
 
         itemTitle = meta.title || parsed.base;
-        // Preserve historical behaviour: title + tags + body are all searchable.
         fullText = [itemTitle, itemTags.join(" "), fm.content].join("\n");
       } else {
-        // Non-md items have no tags — they can't match a per-item tag filter.
         if (opts.tagFilter && opts.tagFilter.length > 0) continue;
         itemTitle = parsed.base;
         itemTags = [];

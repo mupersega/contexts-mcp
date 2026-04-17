@@ -56,7 +56,7 @@ export function layout(title: string, body: string): string {
     } catch (e) {}
   })();
   </script>
-  <style>html,body{background:#111;color:#ccc;}html[data-theme="light"],html[data-theme="light"] body{background:#e8e0cc;color:#2a2824;}</style>
+  <style>html,body{background:#16181d;color:#c9d1d9;}html[data-theme="light"],html[data-theme="light"] body{background:#e8e0cc;color:#2a2824;}</style>
   <title>${esc(title)} - Contexts</title>
   <script src="https://unpkg.com/htmx.org@2.0.4"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -72,22 +72,22 @@ export function layout(title: string, body: string): string {
   </script>
   <style>
     :root {
-      --bg: #1a1a1a; --surface: #222222; --surface-raised: #2a2a2a;
-      --border: #444444; --border-heavy: #666666;
-      --text: #cccccc; --text-muted: #777777; --text-bright: #e0e0e0; --text-dim: #555555;
-      --tag-bg: #333333; --tag-text: #bbbbbb;
+      --bg: #1c1f26; --surface: #23262e; --surface-raised: #2c303a;
+      --border: #3d424d; --border-heavy: #5a6070;
+      --text: #c9d1d9; --text-muted: #7d8491; --text-bright: #e6e8ec; --text-dim: #5a6070;
+      --tag-bg: #2c303a; --tag-text: #b4bbc7;
       --accent: #4ade80; --accent-glow: #4ade80;
-      --accent-line: rgba(74,222,128,0.07); --accent-line-hover: rgba(74,222,128,0.6);
-      --selection-bg: #4ade80; --selection-text: #0a0a0a;
-      --body-bg: #111111;
-      --input-bg: #181818; --input-bg-focus: #1d1d1d;
-      --code-bg: #181818; --pre-bg: #141414; --table-stripe: #111111;
-      --hover-text: #ffffff;
-      --btn-shadow: #000000; --btn-primary-text: #000000;
-      --flash-success-bg: #1a1f1a; --flash-error-bg: #1f1a1a; --flash-error-border: #888888;
-      --scanline: rgba(0,0,0,0.04); --vignette: rgba(0,0,0,0.4);
-      --noise-blend: overlay; --noise-opacity: 0.5;
-      --container-shadow: rgba(0,0,0,0.3);
+      --accent-line: rgba(74,222,128,0.08); --accent-line-hover: rgba(74,222,128,0.65);
+      --selection-bg: #4ade80; --selection-text: #0a1209;
+      --body-bg: #16181d;
+      --input-bg: #1d2027; --input-bg-focus: #22262e;
+      --code-bg: #1d2027; --pre-bg: #181b21; --table-stripe: #181b21;
+      --hover-text: #f0f2f5;
+      --btn-shadow: #0c0e12; --btn-primary-text: #111318;
+      --flash-success-bg: #1d2523; --flash-error-bg: #25211d; --flash-error-border: #8a8070;
+      --scanline: rgba(0,0,0,0.035); --vignette: rgba(0,0,0,0.35);
+      --noise-blend: overlay; --noise-opacity: 0.35;
+      --container-shadow: rgba(0,0,0,0.25);
       --sticky-header-h: 4.5rem;
       --sticky-crumb-h: 2.25rem;
     }
@@ -483,6 +483,61 @@ export function layout(title: string, body: string): string {
       letter-spacing: 0.2em; text-transform: uppercase; font-family: 'IBM Plex Mono', monospace;
     }
     .footer-shutdown { display: inline-block; margin: 0.5rem 0 0 0; }
+    .footer-about { display: block; margin: 1rem auto 0; max-width: 32rem; text-align: left; }
+    .footer-about summary {
+      cursor: pointer; color: var(--text-muted); letter-spacing: 0.2em;
+      font-size: 0.6rem; text-align: center; list-style: none;
+    }
+    .footer-about summary::-webkit-details-marker { display: none; }
+    .footer-about summary::before { content: '▸ '; opacity: 0.6; }
+    .footer-about[open] summary::before { content: '▾ '; }
+    .footer-about-body {
+      margin-top: 0.75rem; padding: 0.75rem 1rem;
+      background: var(--code-bg); border: 1px solid var(--border);
+      font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem;
+      letter-spacing: 0.02em; text-transform: none; color: var(--text-muted);
+      white-space: pre-wrap; word-break: break-all;
+    }
+    .footer-about-body dt { color: var(--text-dim); font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em; }
+    .footer-about-body dd { margin: 0 0 0.4rem 0; color: var(--text); }
+    .footer-about-body dd:last-child { margin-bottom: 0; }
+
+    /* --- List header controls --- */
+    .list-controls {
+      display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; align-items: center;
+      margin: 0.75rem 0 1rem 0; padding: 0.5rem 0.75rem;
+      border: 1px dotted var(--border); background: var(--surface);
+      font-size: 0.7rem; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.08em;
+    }
+    .list-controls .list-label {
+      color: var(--text-dim); font-size: 0.65rem; margin-right: 0.1rem;
+    }
+    .sort-tab {
+      display: inline-block; padding: 0.15rem 0.5rem;
+      font-size: 0.7rem; color: var(--text-muted);
+      border: 1px solid transparent; border-bottom: 1px dotted var(--text-dim);
+      text-transform: uppercase; letter-spacing: 0.08em;
+    }
+    .sort-tab:hover {
+      color: var(--text-bright); border-color: var(--border);
+      border-bottom-style: solid; background: var(--surface-raised);
+    }
+    .sort-tab.active {
+      color: var(--accent); background: var(--surface-raised);
+      border-color: var(--accent); border-bottom: 1px solid var(--accent);
+      text-shadow: 0 0 6px var(--accent-glow);
+    }
+    .sort-tab.active::before { content: '▸ '; color: var(--accent); }
+    .list-controls .chip {
+      display: inline-flex; align-items: center; gap: 0.3rem;
+      margin-left: auto;
+      padding: 0.15rem 0.55rem; font-size: 0.65rem;
+      background: var(--surface-raised); border: 1px dotted var(--border);
+      color: var(--text-muted);
+    }
+    .list-controls .chip::before { content: '▮'; color: var(--text-dim); font-size: 0.55rem; }
+    .list-controls .chip:hover { color: var(--text-bright); border-style: solid; }
 
     /* --- Selection --- */
     ::selection { background: var(--selection-bg); color: var(--selection-text); text-shadow: none; }
@@ -524,7 +579,11 @@ export function layout(title: string, body: string): string {
     </header>
     ${body}
     <footer class="classification-footer">
-      <span id="footer-text">CONTEXT MANAGEMENT SYSTEM v1.1 &mdash; TERMINAL ${terminalId} &mdash; SESSION ACTIVE</span>
+      <span id="footer-text">CONTEXT MANAGEMENT SYSTEM &mdash; TERMINAL ${terminalId} &mdash; SESSION ACTIVE</span>
+      <details id="footer-about" class="footer-about">
+        <summary>About</summary>
+        <div id="footer-about-body">loading...</div>
+      </details>
       <form hx-post="/shutdown" hx-confirm="Shut down the Contexts UI server?" hx-target="#footer-text" hx-swap="outerHTML" class="footer-shutdown">
         <button type="submit" class="btn btn-sm btn-danger">× Shutdown</button>
       </form>
@@ -622,6 +681,60 @@ export function layout(title: string, body: string): string {
       render();
     });
   })();
+  (function() {
+    var about = document.getElementById('footer-about');
+    var body = document.getElementById('footer-about-body');
+    if (!about || !body) return;
+    var loaded = false;
+    about.addEventListener('toggle', function() {
+      if (!about.open || loaded) return;
+      loaded = true;
+      body.className = 'footer-about-body';
+      fetch('/diagnose').then(function(r){ return r.json(); }).then(function(d){
+        function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+        body.innerHTML =
+          '<dl>' +
+          '<dt>version</dt><dd>' + esc(d.version) + '</dd>' +
+          '<dt>data dir</dt><dd>' + esc(d.dataDir) + '</dd>' +
+          '<dt>config</dt><dd>' + esc(d.configPath) + '</dd>' +
+          '<dt>contexts</dt><dd>' + d.contextCount + ' (' + d.archivedCount + ' archived)</dd>' +
+          '<dt>items</dt><dd>' + d.itemCount + ' (' + (d.totalBytes/1024).toFixed(1) + ' kB)</dd>' +
+          '<dt>scan</dt><dd>' + d.lastScanMs + ' ms</dd>' +
+          '</dl>';
+      }).catch(function(err){
+        body.textContent = 'diagnose failed: ' + err.message;
+      });
+    });
+  })();
+  (function() {
+    // Per-item Copy button — fetches the raw content from /raw and writes to
+    // clipboard. Markdown strips YAML frontmatter unless Alt is held.
+    document.addEventListener('click', function(ev) {
+      var btn = ev.target.closest && ev.target.closest('[data-copy-raw]');
+      if (!btn) return;
+      ev.preventDefault();
+      var url = btn.getAttribute('data-copy-raw');
+      var ext = btn.getAttribute('data-ext');
+      var withFrontmatter = ev.altKey;
+      fetch(url).then(function(r){ return r.text(); }).then(function(raw) {
+        var out = raw;
+        if (ext === 'md' && !withFrontmatter) {
+          var m = raw.match(/^---\\n[\\s\\S]*?\\n---\\n?/);
+          if (m) out = raw.slice(m[0].length);
+        }
+        return (navigator.clipboard && navigator.clipboard.writeText)
+          ? navigator.clipboard.writeText(out)
+          : Promise.reject(new Error('clipboard unavailable'));
+      }).then(function() {
+        var original = btn.textContent;
+        btn.textContent = 'Copied';
+        setTimeout(function(){ btn.textContent = original; }, 1200);
+      }).catch(function(err){
+        btn.textContent = 'Copy failed';
+        setTimeout(function(){ btn.textContent = 'Copy'; }, 1500);
+      });
+    });
+  })();
   </script>
 </body>
 </html>`;
@@ -660,7 +773,16 @@ function renderContextCardBody(summary: ContextSummary): string {
     </div>`;
 }
 
-export function contextListPage(contexts: ContextSummary[]): string {
+export interface ContextListControls {
+  sort: "name" | "recent_activity" | "created" | "updated";
+  showArchived: boolean;
+  archivedCount: number;
+}
+
+export function contextListPage(
+  contexts: ContextSummary[],
+  controls: ContextListControls
+): string {
   const list = contexts.length
     ? contexts
         .map(
@@ -670,10 +792,44 @@ export function contextListPage(contexts: ContextSummary[]): string {
         .join("")
     : `<div class="empty">No contexts yet. Create one below.</div>`;
 
+  const sortOptions: Array<{ v: ContextListControls["sort"]; label: string }> = [
+    { v: "name", label: "name" },
+    { v: "recent_activity", label: "recent" },
+    { v: "updated", label: "updated" },
+    { v: "created", label: "created" },
+  ];
+  // Plain links instead of a <select> — the native select shows the CRT
+  // scanline overlay, which reads as visual garbage on a small control.
+  const sortParam = (v: string) =>
+    controls.showArchived ? `?sort=${v}&show_archived=1` : `?sort=${v}`;
+  const sortTabs = sortOptions
+    .map(
+      (o) =>
+        `<a class="sort-tab${o.v === controls.sort ? " active" : ""}" href="${sortParam(o.v)}">${o.label}</a>`
+    )
+    .join("");
+
+  const archivedToggleHref = controls.showArchived
+    ? `?sort=${esc(controls.sort)}`
+    : `?sort=${esc(controls.sort)}&show_archived=1`;
+  const archivedChip = controls.archivedCount > 0 || controls.showArchived
+    ? `<a class="chip" href="${archivedToggleHref}">${
+        controls.showArchived ? "hide archived" : `archived (${controls.archivedCount})`
+      }</a>`
+    : "";
+
+  const controlsRow = `
+    <div class="list-controls">
+      <span class="list-label">sort by</span>
+      ${sortTabs}
+      ${archivedChip}
+    </div>`;
+
   return layout(
     "All Contexts",
     `
     <h2>Contexts</h2>
+    ${controlsRow}
     <div id="context-list" style="margin-top:1rem;">${list}</div>
     <div class="card" style="margin-top:2rem;">
       <h3>New Context</h3>
@@ -714,6 +870,7 @@ export function contextMetaHeader(name: string, meta: ContextMetadata): string {
       ${links}
       <div class="ctx-meta-actions">
         <a href="/ctx/${esc(name)}/meta/edit" class="btn btn-sm">Edit Metadata</a>
+        <a href="/ctx/${esc(name)}.zip" class="btn btn-sm" download>Download .zip</a>
       </div>
     </div>`;
 }
@@ -779,6 +936,7 @@ export function itemListPage(
               <option value="json">JSON (.json)</option>
               <option value="yaml">YAML (.yaml)</option>
               <option value="csv">CSV (.csv)</option>
+              <option value="sql">SQL (.sql)</option>
             </select>
           </div>
         </div>
@@ -803,9 +961,11 @@ export function itemViewPage(
   created: string,
   updated: string,
   contentHtml: string,
-  isMarkdown: boolean
+  isMarkdown: boolean,
+  rawMode: boolean = false,
 ): string {
-  const appendSupported = isMarkdown || extension === "txt" || extension === "csv";
+  const appendSupported =
+    !rawMode && (isMarkdown || extension === "txt" || extension === "csv" || extension === "sql");
   const appendForm = appendSupported
     ? `<div class="card" style="margin-top:2rem;">
       <h3>Append Content</h3>
@@ -814,15 +974,23 @@ export function itemViewPage(
         <button type="submit" class="btn btn-primary">Append</button>
       </form>
     </div>`
-    : `<div class="empty" style="margin-top:2rem;">Append is not supported for structured data items (.json, .yaml, .yml). Use Edit to replace the full content.</div>`;
+    : rawMode
+      ? ""
+      : `<div class="empty" style="margin-top:2rem;">Append is not supported for structured data items (.json, .yaml, .yml). Use Edit to replace the full content.</div>`;
 
-  const contentClass = isMarkdown ? "doc-content" : "doc-content doc-content-raw";
+  const showAsRaw = rawMode || !isMarkdown;
+  const contentClass = showAsRaw ? "doc-content doc-content-raw" : "doc-content";
+
+  const rawUrl = `/ctx/${esc(context)}/${esc(name)}/raw?ext=${esc(extension)}`;
+  const viewUrl = `/ctx/${esc(context)}/${esc(name)}?ext=${esc(extension)}`;
+  const rawToggleHref = rawMode ? viewUrl : `${viewUrl}&raw=1`;
+  const rawToggleLabel = rawMode ? "Rendered" : "Raw";
 
   return layout(
     title,
     `
     <div class="breadcrumb">
-      <a href="/">Contexts</a> / <a href="/ctx/${esc(context)}">${esc(context)}</a> / <strong>${esc(name)}.${esc(extension)}</strong>
+      <a href="/">Contexts</a> / <a href="/ctx/${esc(context)}">${esc(context)}</a> / <strong>${esc(name)}.${esc(extension)}</strong>${rawMode ? ' <span style="color:var(--text-dim);">(raw)</span>' : ""}
     </div>
     <div class="item-title-sticky">
       <div>
@@ -835,6 +1003,9 @@ export function itemViewPage(
         ${tagList.length ? `<div style="margin-top:0.5rem;">${tags(tagList)}</div>` : ""}
       </div>
       <div class="actions">
+        <button type="button" class="btn btn-sm" data-copy-raw="${rawUrl}" data-ext="${esc(extension)}" title="${isMarkdown ? "Copy body (Alt = include frontmatter)" : "Copy raw content"}">Copy</button>
+        <a class="btn btn-sm" href="${rawUrl}&amp;download=1">Download</a>
+        <a class="btn btn-sm" href="${rawToggleHref}">${rawToggleLabel}</a>
         <a href="/ctx/${esc(context)}/${esc(name)}/edit?ext=${esc(extension)}" class="btn btn-sm">Edit</a>
       </div>
     </div>
@@ -942,7 +1113,8 @@ export function searchPage(
   results: SearchResult[] | null,
   query: string,
   contextFilter: string,
-  contexts: string[]
+  contexts: string[],
+  includeArchived: boolean = false,
 ): string {
   const contextOptions = contexts
     .map(
@@ -986,6 +1158,10 @@ export function searchPage(
           </select>
         </div>
       </div>
+      <label style="font-size:0.75rem; display:flex; gap:0.5rem; align-items:center; margin:0.5rem 0;">
+        <input type="checkbox" name="show_archived" value="1" ${includeArchived ? "checked" : ""} style="width:auto; margin:0;">
+        Include archived contexts
+      </label>
       <button type="submit" class="btn btn-primary">Search</button>
     </form>
     <div style="margin-top:1.5rem;">${resultHtml}</div>`
