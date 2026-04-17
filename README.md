@@ -101,6 +101,8 @@ Per-item actions on the UI:
 - **Raw** — toggles a rendered/raw view (useful for eyeballing frontmatter before copying).
 - Context-level **Download .zip** from the context page.
 
+The small palette icon in the top-right opens `/theme` — a theme lab with six knobs (accent, palette, corners, chrome, motion, complement), six named presets, and a **Roll the dice** randomizer. Choices persist per browser in `localStorage`.
+
 ### Windows convenience (optional)
 
 `npm run setup` already offers to create/refresh the Desktop shortcut. If you want just the shortcut step without the config prompts (e.g. after moving the install), call `install.ps1` directly:

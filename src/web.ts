@@ -26,6 +26,7 @@ import {
   itemViewPage,
   itemEditPage,
   searchPage,
+  themeLabPage,
 } from "./templates.js";
 import { loadConfig, MissingDataDirError, packageVersion } from "./config.js";
 
@@ -390,6 +391,15 @@ app.get("/search", async (req, res) => {
 app.get("/diagnose", async (_req, res) => {
   const diag = await storage.getDiagnostics();
   res.json(diag);
+});
+
+// --- Theme Lab ---
+
+// Purely client-side state — no params, no persistence here. The page
+// renders the same HTML for everyone; the inline script reads localStorage
+// and applies data-* attributes to <html>.
+app.get("/theme", (_req, res) => {
+  res.send(themeLabPage());
 });
 
 // --- Shutdown ---

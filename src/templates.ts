@@ -50,9 +50,18 @@ export function layout(title: string, body: string): string {
   <meta name="color-scheme" content="dark light">
   <script>
   (function() {
+    var root = document.documentElement;
     try {
-      var t = localStorage.getItem('contexts-theme');
-      if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
+      if (localStorage.getItem('contexts-theme') === 'light') root.setAttribute('data-theme', 'light');
+      var raw = localStorage.getItem('contexts-style');
+      if (raw) {
+        var s = JSON.parse(raw);
+        ['accent', 'palette', 'corners', 'chrome', 'motion', 'complement'].forEach(function(k) {
+          if (s && typeof s[k] === 'string' && s[k].length > 0) {
+            root.setAttribute('data-' + k, s[k]);
+          }
+        });
+      }
     } catch (e) {}
   })();
   </script>
@@ -79,6 +88,7 @@ export function layout(title: string, body: string): string {
       --accent: #4ade80; --accent-glow: #4ade80;
       --accent-line: rgba(74,222,128,0.08); --accent-line-hover: rgba(74,222,128,0.65);
       --selection-bg: #4ade80; --selection-text: #0a1209;
+      --accent-complement: #ff6b9d;
       --body-bg: #16181d;
       --input-bg: #1d2027; --input-bg-focus: #22262e;
       --code-bg: #1d2027; --pre-bg: #181b21; --table-stripe: #181b21;
@@ -100,6 +110,7 @@ export function layout(title: string, body: string): string {
       --accent: #2d7a3f; --accent-glow: #2d7a3f;
       --accent-line: rgba(45,122,63,0.08); --accent-line-hover: rgba(45,122,63,0.5);
       --selection-bg: #2d7a3f; --selection-text: #f5efe0;
+      --accent-complement: #be185d;
       --body-bg: #e8e0cc;
       --input-bg: #f9f4e5; --input-bg-focus: #fdf9ec;
       --code-bg: #e8e0cc; --pre-bg: #e0d8c2; --table-stripe: #ece5d3;
@@ -111,7 +122,214 @@ export function layout(title: string, body: string): string {
       --container-shadow: rgba(58,50,32,0.035);
     }
 
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; border-radius: 0 !important; }
+    /* --- Theme Lab: accent (data-accent) ---
+       Just the highlight chain. Orthogonal to bg/surface — set independently
+       via data-palette below. Phosphor is the implicit default (in :root). */
+    [data-accent="amber"] {
+      --accent: #ffb000; --accent-glow: #ffb000;
+      --accent-line: rgba(255,176,0,0.09); --accent-line-hover: rgba(255,176,0,0.7);
+      --selection-bg: #ffb000; --selection-text: #1c1200;
+      --accent-complement: #60a5fa;
+    }
+    [data-accent="cyan"] {
+      --accent: #22d3ee; --accent-glow: #22d3ee;
+      --accent-line: rgba(34,211,238,0.08); --accent-line-hover: rgba(34,211,238,0.65);
+      --selection-bg: #22d3ee; --selection-text: #06191e;
+      --accent-complement: #f97316;
+    }
+    [data-accent="magenta"] {
+      --accent: #e879f9; --accent-glow: #e879f9;
+      --accent-line: rgba(232,121,249,0.09); --accent-line-hover: rgba(232,121,249,0.65);
+      --selection-bg: #e879f9; --selection-text: #1e0820;
+      --accent-complement: #fbbf24;
+    }
+    [data-accent="red"] {
+      --accent: #f87171; --accent-glow: #f87171;
+      --accent-line: rgba(248,113,113,0.09); --accent-line-hover: rgba(248,113,113,0.6);
+      --selection-bg: #f87171; --selection-text: #1e0808;
+      --accent-complement: #14b8a6;
+    }
+    [data-accent="slate"] {
+      --accent: #94a3b8; --accent-glow: #94a3b8;
+      --accent-line: rgba(148,163,184,0.06); --accent-line-hover: rgba(148,163,184,0.5);
+      --selection-bg: #94a3b8; --selection-text: #0f172a;
+      --accent-complement: #fb7185;
+    }
+
+    /* Light-mode accent overrides — darker, more saturated variants that
+       read against the paper background. Beats both the dark-mode accent
+       rule and the light base (specificity 0-2-0). */
+    [data-theme="light"][data-accent="amber"]   { --accent: #b76a00; --accent-glow: #b76a00; --accent-line: rgba(183,106,0,0.08); --accent-line-hover: rgba(183,106,0,0.5); --selection-bg: #b76a00; --selection-text: #f5efe0; --accent-complement: #1d4ed8; }
+    [data-theme="light"][data-accent="cyan"]    { --accent: #0e7490; --accent-glow: #0e7490; --accent-line: rgba(14,116,144,0.08); --accent-line-hover: rgba(14,116,144,0.5); --selection-bg: #0e7490; --selection-text: #f5efe0; --accent-complement: #c2410c; }
+    [data-theme="light"][data-accent="magenta"] { --accent: #a21caf; --accent-glow: #a21caf; --accent-line: rgba(162,28,175,0.08); --accent-line-hover: rgba(162,28,175,0.5); --selection-bg: #a21caf; --selection-text: #f5efe0; --accent-complement: #a16207; }
+    [data-theme="light"][data-accent="red"]     { --accent: #b91c1c; --accent-glow: #b91c1c; --accent-line: rgba(185,28,28,0.08); --accent-line-hover: rgba(185,28,28,0.5); --selection-bg: #b91c1c; --selection-text: #f5efe0; --accent-complement: #0f766e; }
+    [data-theme="light"][data-accent="slate"]   { --accent: #475569; --accent-glow: #475569; --accent-line: rgba(71,85,105,0.06); --accent-line-hover: rgba(71,85,105,0.4); --selection-bg: #475569; --selection-text: #f5efe0; --accent-complement: #be123c; }
+
+    /* --- Theme Lab: palette (data-palette) ---
+       Full background/surface/text/border chain. Does NOT touch accent vars
+       — pair it freely with any data-accent. Dark-mode overrides only; in
+       light mode the :root[data-theme="light"] block wins on specificity. */
+    [data-palette="warm"] {
+      --body-bg: #120d06; --bg: #1b140a; --surface: #231a0f; --surface-raised: #2d2214;
+      --border: #3d2e1a; --border-heavy: #5e4828;
+      --text: #e8d4a0; --text-muted: #a08866; --text-bright: #fff0c8; --text-dim: #6b5835;
+      --hover-text: #ffecb2;
+      --tag-bg: #2d2214; --tag-text: #c9b480;
+      --input-bg: #1e160c; --input-bg-focus: #261d10;
+      --code-bg: #1e160c; --pre-bg: #18120a; --table-stripe: #18120a;
+      --btn-shadow: #0a0705; --container-shadow: rgba(60,30,0,0.28);
+      --scanline: rgba(80,40,0,0.05); --vignette: rgba(40,20,0,0.4);
+    }
+    [data-palette="cold"] {
+      --body-bg: #0a1218; --bg: #111a22; --surface: #17232e; --surface-raised: #1e2d3b;
+      --border: #2c3e50; --border-heavy: #45617d;
+      --text: #c4d6e4; --text-muted: #7a8f9e; --text-bright: #e2eef8; --text-dim: #4d6375;
+      --hover-text: #f0f8ff;
+      --tag-bg: #1e2d3b; --tag-text: #a6bccc;
+      --input-bg: #131e28; --input-bg-focus: #18242e;
+      --code-bg: #131e28; --pre-bg: #0f1922; --table-stripe: #0f1922;
+      --btn-shadow: #050a0f; --container-shadow: rgba(0,30,60,0.25);
+      --scanline: rgba(0,30,60,0.05); --vignette: rgba(0,20,50,0.4);
+    }
+    [data-palette="deep"] {
+      --body-bg: #130c1a; --bg: #1a1124; --surface: #241832; --surface-raised: #2f2140;
+      --border: #3f2a56; --border-heavy: #604380;
+      --text: #d8c0e4; --text-muted: #9676b5; --text-bright: #f0def5; --text-dim: #6b4a80;
+      --hover-text: #ffe6ff;
+      --tag-bg: #2f2140; --tag-text: #c0a0d8;
+      --input-bg: #1d1428; --input-bg-focus: #24182f;
+      --code-bg: #1d1428; --pre-bg: #181021; --table-stripe: #181021;
+      --btn-shadow: #0b0511; --container-shadow: rgba(60,20,80,0.28);
+      --scanline: rgba(60,20,80,0.05); --vignette: rgba(50,10,70,0.4);
+    }
+    [data-palette="slate"] {
+      --body-bg: #15171a; --bg: #1b1e22; --surface: #22262c; --surface-raised: #2b2f37;
+      --border: #3d424a; --border-heavy: #5c6270;
+      --text: #c6ccd4; --text-muted: #7c838f; --text-bright: #e8ebef; --text-dim: #555b66;
+      --hover-text: #f0f2f5;
+      --tag-bg: #2b2f37; --tag-text: #b0b6c0;
+      --input-bg: #1d2026; --input-bg-focus: #23262d;
+      --code-bg: #1d2026; --pre-bg: #181b20; --table-stripe: #181b20;
+      --btn-shadow: #0a0b0d; --container-shadow: rgba(0,0,0,0.22);
+      --scanline: rgba(0,0,0,0.03); --vignette: rgba(0,0,0,0.3);
+    }
+
+    /* --- Theme Lab: complement (data-complement) ---
+       Default off. When on, just two surfaces flip from --accent to
+       --accent-complement: the text selection, and the occasional flash
+       in the sys-bars activity strip. Tiny pops — the rest of the UI
+       (sort-tab active, card hover, status badges) stays on accent. */
+    [data-complement="on"] ::selection {
+      background: var(--accent-complement);
+      color: var(--selection-text);
+      text-shadow: none;
+    }
+    [data-complement="on"] ::-moz-selection {
+      background: var(--accent-complement);
+      color: var(--selection-text);
+      text-shadow: none;
+    }
+    [data-complement="on"] .sys-bars .hit {
+      color: var(--accent-complement);
+      text-shadow: 0 0 3px var(--accent-complement);
+    }
+
+    /* Slot-machine highlight during a roll — knob buttons flash through
+       values without actually changing the theme until the roll settles. */
+    .sort-tab.rolling {
+      color: var(--accent); background: var(--surface-raised);
+      border-color: var(--accent); border-bottom: 1px solid var(--accent);
+      opacity: 0.55;
+    }
+
+    /* Light-mode accent overrides — darker, more saturated variants that
+       read against the paper background. */
+    [data-theme="light"][data-accent="amber"] {
+      --accent: #b76a00; --accent-glow: #b76a00;
+      --accent-line: rgba(183,106,0,0.08); --accent-line-hover: rgba(183,106,0,0.5);
+      --selection-bg: #b76a00; --selection-text: #f5efe0;
+    }
+    [data-theme="light"][data-accent="cyan"] {
+      --accent: #0e7490; --accent-glow: #0e7490;
+      --accent-line: rgba(14,116,144,0.08); --accent-line-hover: rgba(14,116,144,0.5);
+      --selection-bg: #0e7490; --selection-text: #f5efe0;
+    }
+    [data-theme="light"][data-accent="magenta"] {
+      --accent: #a21caf; --accent-glow: #a21caf;
+      --accent-line: rgba(162,28,175,0.08); --accent-line-hover: rgba(162,28,175,0.5);
+      --selection-bg: #a21caf; --selection-text: #f5efe0;
+    }
+    [data-theme="light"][data-accent="red"] {
+      --accent: #b91c1c; --accent-glow: #b91c1c;
+      --accent-line: rgba(185,28,28,0.08); --accent-line-hover: rgba(185,28,28,0.5);
+      --selection-bg: #b91c1c; --selection-text: #f5efe0;
+    }
+    [data-theme="light"][data-accent="slate"] {
+      --accent: #475569; --accent-glow: #475569;
+      --accent-line: rgba(71,85,105,0.06); --accent-line-hover: rgba(71,85,105,0.4);
+      --selection-bg: #475569; --selection-text: #f5efe0;
+    }
+
+    /* --- Theme Lab: corner radius ---
+       One variable, applied only to the shapes we explicitly control
+       (below). Default is 0 (sharp), matching the ship look. */
+    :root { --corner: 0; }
+    [data-corners="soft"]     { --corner: 4px; }
+    [data-corners="rounded"]  { --corner: 10px; }
+    [data-corners="squircle"] { --corner: 18px; }
+
+    /* --- Theme Lab: chrome intensity ---
+       'full' (default) leaves everything on. 'subtle' kills vignette + noise
+       but keeps scanlines and content-label ::before badges. 'flat' removes
+       all the decorative overlays and badges entirely. */
+    [data-chrome="subtle"] body::after,
+    [data-chrome="subtle"] #noise-canvas { display: none; }
+
+    [data-chrome="flat"] body::before,
+    [data-chrome="flat"] body::after,
+    [data-chrome="flat"] #noise-canvas { display: none; }
+    [data-chrome="flat"] .container { animation: none; box-shadow: none; }
+    [data-chrome="flat"] .card::before,
+    [data-chrome="flat"] .ctx-meta-header::before,
+    [data-chrome="flat"] .doc-content::before,
+    [data-chrome="flat"] .doc-content::after,
+    [data-chrome="flat"] .doc-content pre::before,
+    [data-chrome="flat"] .status-badge::before,
+    [data-chrome="flat"] .status-badge::after,
+    [data-chrome="flat"] header h1 a::before,
+    [data-chrome="flat"] header h1 a::after,
+    [data-chrome="flat"] .sort-tab.active::before { content: none; }
+    [data-chrome="flat"] header h1 a::after { display: none; }
+
+    /* --- Theme Lab: motion ---
+       Kills CSS animations and transitions globally. The JS-driven noise
+       canvas and sys-bars strip keep running silently; we hide/flatten
+       their output so the effect is what matters. */
+    [data-motion="off"] *,
+    [data-motion="off"] *::before,
+    [data-motion="off"] *::after {
+      animation: none !important;
+      transition: none !important;
+    }
+    [data-motion="off"] #noise-canvas { opacity: 0 !important; }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* Radius applied to the shapes we explicitly control. Element selectors
+       (input/textarea/select/button) beat UA defaults; class selectors beat
+       the rest. --corner defaults to 0, so the ship look is unchanged. */
+    input, textarea, select, button,
+    .card, .btn, .status-badge, .tag, .tag-ctx, .ctx-link, .sort-tab,
+    .chip, .ctx-meta-header, .doc-content, .search-match, .flash,
+    .footer-about-body, .item-kind,
+    .list-controls, .empty, .breadcrumb,
+    .theme-knob, .theme-preview, .doc-content pre, .doc-content code,
+    .doc-content blockquote, .doc-content table, .search-match {
+      border-radius: var(--corner);
+    }
+    /* A few inner elements should clip to their parent's rounding so the
+       corners don't show through as a hard square. */
+    .doc-content table { overflow: hidden; }
 
     body {
       font-family: 'IBM Plex Mono', 'Courier New', monospace;
@@ -178,6 +396,15 @@ export function layout(title: string, body: string): string {
     }
     #theme-toggle:hover { color: var(--text-bright); }
     :root[data-theme="light"] #theme-toggle { transform: rotate(180deg); }
+    #theme-lab-link {
+      margin-left: 0.5rem; display: inline-flex; align-items: center;
+      vertical-align: middle;
+      color: var(--accent); border: none; line-height: 1;
+      transition: opacity 0.1s, transform 0.15s;
+      opacity: 0.85;
+    }
+    #theme-lab-link:hover { opacity: 1; transform: scale(1.1); border: none; }
+    #theme-lab-link svg { display: block; width: 14px; height: 14px; }
     header h1 { font-size: 1.4rem; letter-spacing: 0.15em; }
     header h1 a { color: var(--text-bright); border-bottom: none; }
     header h1 a::before { content: '> '; color: var(--text-dim); font-family: 'IBM Plex Mono', monospace; }
@@ -422,7 +649,7 @@ export function layout(title: string, body: string): string {
     }
     .doc-content pre {
       background: var(--pre-bg); padding: 1rem; overflow-x: auto; margin-bottom: 1rem;
-      border: 1px solid var(--border); border-left: 3px solid var(--border-heavy); position: relative;
+      border: 1px solid var(--border); position: relative;
     }
     .doc-content pre::before {
       content: 'CODE'; position: absolute; top: 0.25rem; right: 0.5rem;
@@ -450,8 +677,9 @@ export function layout(title: string, body: string): string {
     }
     .doc-content ul, .doc-content ol { padding-left: 1.5rem; margin-bottom: 0.75rem; }
     .doc-content blockquote {
-      border-left: 3px double var(--border-heavy); padding-left: 1rem;
-      color: var(--text-muted); font-style: italic; margin: 1rem 0;
+      padding: 0.75rem 1rem; margin: 1rem 0;
+      background: var(--code-bg); border: 1px dotted var(--border);
+      color: var(--text-muted); font-style: italic;
     }
     .doc-content-raw {
       white-space: pre; font-family: 'IBM Plex Mono', monospace;
@@ -462,7 +690,7 @@ export function layout(title: string, body: string): string {
     .search-match {
       background: var(--code-bg); padding: 0.5rem 0.75rem; font-size: 0.8rem;
       font-family: 'IBM Plex Mono', monospace; margin-top: 0.5rem;
-      color: var(--text-muted); border-left: 2px solid var(--text-dim); position: relative;
+      color: var(--text-muted); border: 1px dotted var(--border); position: relative;
     }
 
     .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
@@ -529,6 +757,50 @@ export function layout(title: string, body: string): string {
       text-shadow: 0 0 6px var(--accent-glow);
     }
     .sort-tab.active::before { content: '▸ '; color: var(--accent); }
+
+    /* --- Theme Lab layout --- */
+    .theme-lab-intro {
+      color: var(--text-muted); font-size: 0.85rem; margin: 0.25rem 0 1.5rem 0;
+      font-style: italic;
+    }
+    .theme-section {
+      font-size: 0.75rem; letter-spacing: 0.15em; margin: 2rem 0 0.75rem 0;
+      color: var(--text-dim); text-transform: uppercase;
+      border-bottom: 1px dotted var(--border); padding-bottom: 0.4rem;
+    }
+    .theme-preview { margin: 0.5rem 0 0 0; }
+    .theme-presets {
+      display: flex; flex-wrap: wrap; gap: 0.5rem;
+    }
+    .theme-knobs {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;
+    }
+    @media (max-width: 640px) { .theme-knobs { grid-template-columns: 1fr; } }
+    .theme-knob {
+      border: 1px dotted var(--border); background: var(--surface);
+      padding: 0.5rem 0.75rem 0.75rem 0.75rem;
+    }
+    .theme-knob legend {
+      font-size: 0.65rem; letter-spacing: 0.15em;
+      color: var(--text-dim); text-transform: uppercase;
+      padding: 0 0.4rem;
+    }
+    .theme-knob .knob-row {
+      display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.25rem;
+    }
+    .theme-knob .sort-tab { cursor: pointer; }
+    .theme-actions {
+      display: flex; gap: 0.75rem; align-items: center;
+      margin-top: 1.5rem;
+    }
+    #theme-roll {
+      font-size: 0.95rem; padding: 0.6rem 1.2rem;
+      min-width: 11rem; text-align: center;
+    }
+    .theme-footnote {
+      margin-top: 1rem; font-size: 0.7rem; color: var(--text-dim);
+      font-style: italic; letter-spacing: 0.02em;
+    }
     .list-controls .chip {
       display: inline-flex; align-items: center; gap: 0.3rem;
       margin-left: auto;
@@ -570,7 +842,7 @@ export function layout(title: string, body: string): string {
   <canvas id="noise-canvas"></canvas>
   <div class="container">
     <header>
-      <div class="sys-bars" id="sys-bars"><span aria-hidden="true">SYS.ACTIVE </span><span id="sys-bars-strip" aria-hidden="true">░░░░░░░░░░░░░░░░░░░░</span><button type="button" id="theme-toggle" aria-label="Toggle theme">◐</button></div>
+      <div class="sys-bars" id="sys-bars"><span aria-hidden="true">SYS.ACTIVE </span><span id="sys-bars-strip" aria-hidden="true">░░░░░░░░░░░░░░░░░░░░</span><a href="/theme" id="theme-lab-link" title="Theme lab" aria-label="Open theme lab"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M7.5 1.5 C3.8 1.5 1 3.9 1 7 C1 9.7 3 11.3 4.8 11.3 C5.5 11.3 5.9 10.9 6.2 10.4 C6.6 9.7 7.2 9.4 7.8 9.4 C8.6 9.4 9 9.8 9.2 10.4 C9.4 11 9.8 11.5 10.5 11.5 C12.8 11.5 15 9.5 15 6.7 C15 3.8 12 1.5 7.5 1.5 Z" fill="currentColor"/><circle cx="4.5" cy="5.5" r="1" fill="var(--bg)"/><circle cx="7.5" cy="3.8" r="1" fill="var(--bg)"/><circle cx="10.5" cy="5" r="1" fill="var(--bg)"/><circle cx="12" cy="7.5" r="1" fill="var(--bg)"/></svg></a><button type="button" id="theme-toggle" aria-label="Toggle theme">◐</button></div>
       <h1><a href="/">Contexts</a></h1>
       <nav>
         <a href="/">All Contexts</a>
@@ -1165,5 +1437,227 @@ export function searchPage(
       <button type="submit" class="btn btn-primary">Search</button>
     </form>
     <div style="margin-top:1.5rem;">${resultHtml}</div>`
+  );
+}
+
+// --- Theme Lab ---
+
+const KNOB_VALUES: Record<string, string[]> = {
+  accent: ["phosphor", "amber", "cyan", "magenta", "red", "slate"],
+  palette: ["default", "warm", "cold", "deep", "slate"],
+  corners: ["sharp", "soft", "rounded", "squircle"],
+  chrome: ["full", "subtle", "flat"],
+  motion: ["on", "off"],
+  complement: ["off", "on"],
+};
+
+const PRESETS: Array<[string, string]> = [
+  ["default", "Default"],
+  ["boring", "Boring"],
+  ["amber", "Amber Terminal"],
+  ["paper", "Paper"],
+  ["arcade", "Arcade"],
+  ["noir", "Noir"],
+];
+
+function knobRow(dimension: string, label: string): string {
+  const buttons = KNOB_VALUES[dimension]
+    .map(
+      (v) =>
+        `<button type="button" class="sort-tab" data-knob="${esc(dimension)}" data-value="${esc(v)}">${esc(v)}</button>`
+    )
+    .join("");
+  return `
+    <fieldset class="theme-knob">
+      <legend>${esc(label)}</legend>
+      <div class="knob-row">${buttons}</div>
+    </fieldset>`;
+}
+
+export function themeLabPage(): string {
+  return layout(
+    "Theme Lab",
+    `
+    <h2>Theme Lab</h2>
+    <p class="theme-lab-intro">Mess with the styles. Your choices save locally in this browser.</p>
+
+    <div class="theme-preview">
+      <div class="card" id="theme-preview-card">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+          <div style="flex:1; min-width:0;">
+            <h3>Preview</h3>
+            <div class="meta">preview-card</div>
+            <div style="margin-top:0.35rem; font-size:0.85rem; color:var(--text-muted); font-style:italic;">
+              This card mirrors the rest of the UI. Toggle a knob and it changes live.
+            </div>
+            <div style="margin-top:0.6rem;">
+              <span class="status-badge">active</span>
+              <span class="tag tag-ctx">preview</span>
+              <span class="tag">demo</span>
+            </div>
+          </div>
+          <div class="actions">
+            <button type="button" class="btn btn-sm">Secondary</button>
+            <button type="button" class="btn btn-sm btn-primary">Primary</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3 class="theme-section">Presets</h3>
+    <div class="theme-presets">
+      ${PRESETS.map(
+        ([id, label]) => `<button type="button" class="btn btn-sm" data-preset="${esc(id)}">${esc(label)}</button>`
+      ).join("")}
+    </div>
+
+    <h3 class="theme-section">Knobs</h3>
+    <div class="theme-knobs">
+      ${knobRow("accent", "Accent")}
+      ${knobRow("palette", "Palette")}
+      ${knobRow("corners", "Corners")}
+      ${knobRow("chrome", "Chrome")}
+      ${knobRow("motion", "Motion")}
+      ${knobRow("complement", "Complement")}
+    </div>
+
+    <div class="theme-actions">
+      <button type="button" class="btn btn-primary" id="theme-roll">Roll the dice</button>
+      <button type="button" class="btn" id="theme-reset">Reset to default</button>
+    </div>
+
+    <p class="theme-footnote">Preset sets every knob at once. Roll scrambles every knob randomly. Keep it or roll again.</p>
+
+    <script>
+    (function() {
+      var root = document.documentElement;
+      var KEY = 'contexts-style';
+      var DIMENSIONS = ['accent','palette','corners','chrome','motion','complement'];
+      var VALUES = ${JSON.stringify(KNOB_VALUES)};
+      // First value in each dimension is the implicit default (matches ship look).
+      var PRESETS = {
+        'default': { accent:'phosphor', palette:'default', corners:'sharp',    chrome:'full',   motion:'on',  complement:'off' },
+        'boring':  { accent:'slate',    palette:'slate',   corners:'soft',     chrome:'flat',   motion:'off', complement:'off' },
+        'amber':   { accent:'amber',    palette:'warm',    corners:'sharp',    chrome:'full',   motion:'on',  complement:'off' },
+        'paper':   { accent:'slate',    palette:'default', corners:'rounded',  chrome:'flat',   motion:'on',  complement:'off' },
+        'arcade':  { accent:'magenta',  palette:'deep',    corners:'squircle', chrome:'full',   motion:'on',  complement:'on'  },
+        'noir':    { accent:'cyan',     palette:'cold',    corners:'sharp',    chrome:'subtle', motion:'on',  complement:'off' }
+      };
+
+      function readCurrent() {
+        var s = {};
+        DIMENSIONS.forEach(function(k) {
+          s[k] = root.getAttribute('data-' + k) || VALUES[k][0];
+        });
+        return s;
+      }
+      function persist(state) {
+        try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+      }
+      function reflect(state) {
+        DIMENSIONS.forEach(function(dim) {
+          VALUES[dim].forEach(function(v) {
+            var sel = '[data-knob="' + dim + '"][data-value="' + v + '"]';
+            var btn = document.querySelector(sel);
+            if (btn) btn.classList.toggle('active', state[dim] === v);
+          });
+        });
+      }
+      function applyState(patch, opts) {
+        var state = readCurrent();
+        DIMENSIONS.forEach(function(k) { if (patch[k]) state[k] = patch[k]; });
+        DIMENSIONS.forEach(function(k) { root.setAttribute('data-' + k, state[k]); });
+        if (!opts || opts.persist !== false) persist(state);
+        reflect(state);
+      }
+      function resetAll() {
+        DIMENSIONS.forEach(function(k) { root.removeAttribute('data-' + k); });
+        try { localStorage.removeItem(KEY); } catch (e) {}
+        reflect(readCurrent());
+      }
+
+      document.querySelector('.theme-knobs').addEventListener('click', function(ev) {
+        var btn = ev.target.closest && ev.target.closest('[data-knob]');
+        if (!btn) return;
+        var p = {};
+        p[btn.dataset.knob] = btn.dataset.value;
+        applyState(p);
+      });
+      document.querySelector('.theme-presets').addEventListener('click', function(ev) {
+        var btn = ev.target.closest && ev.target.closest('[data-preset]');
+        if (!btn) return;
+        applyState(PRESETS[btn.dataset.preset]);
+      });
+
+      var rollBtn = document.getElementById('theme-roll');
+      rollBtn.addEventListener('click', function() {
+        // Pick the final combo upfront. The scramble is visual-only —
+        // knob buttons flash through random values, but the real theme
+        // doesn't change until the roll settles and we applyState(chosen).
+        var chosen = {};
+        DIMENSIONS.forEach(function(dim) {
+          var arr = VALUES[dim];
+          chosen[dim] = arr[Math.floor(Math.random() * arr.length)];
+        });
+
+        // Decelerating delays: ease-out quadratic from ~30ms to ~400ms.
+        // Total roll time ~= 1.5s. Fast at the start, noticeably slowing
+        // toward the end — the "ching ching ching" that lands on a result.
+        var steps = 14;
+        var delays = [];
+        for (var k = 0; k < steps; k++) {
+          var t = k / (steps - 1);
+          delays.push(25 + Math.round(t * t * 380));
+        }
+
+        var knobsByDim = {};
+        DIMENSIONS.forEach(function(dim) {
+          knobsByDim[dim] = Array.prototype.slice.call(
+            document.querySelectorAll('[data-knob="' + dim + '"]')
+          );
+        });
+        function clearRolling() {
+          DIMENSIONS.forEach(function(dim) {
+            knobsByDim[dim].forEach(function(b) { b.classList.remove('rolling'); });
+          });
+        }
+        function flashRandom() {
+          DIMENSIONS.forEach(function(dim) {
+            knobsByDim[dim].forEach(function(b) { b.classList.remove('rolling'); });
+            var btns = knobsByDim[dim];
+            btns[Math.floor(Math.random() * btns.length)].classList.add('rolling');
+          });
+        }
+
+        rollBtn.disabled = true;
+        var originalLabel = rollBtn.textContent;
+
+        var step = 0;
+        function tick() {
+          if (step >= steps) {
+            clearRolling();
+            applyState(chosen);
+            rollBtn.disabled = false;
+            rollBtn.textContent = originalLabel;
+            return;
+          }
+          // Cycle 1, 2, 3 dots — pad the trailing slots with non-breaking
+          // spaces so the displayed string is always 10 chars and 'Rolling'
+          // stays put under text-align:center.
+          var n = (step % 3) + 1;
+          rollBtn.textContent = 'Rolling' + '.'.repeat(n) + '\u00A0'.repeat(3 - n);
+          flashRandom();
+          setTimeout(tick, delays[step]);
+          step += 1;
+        }
+        tick();
+      });
+
+      document.getElementById('theme-reset').addEventListener('click', resetAll);
+
+      reflect(readCurrent());
+    })();
+    </script>
+    `
   );
 }
