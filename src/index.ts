@@ -10,14 +10,13 @@ import {
   UpdateContextMetadataArgsSchema,
   ListItemsArgsSchema,
   GetItemArgsSchema,
-  GetItemRawArgsSchema,
   CreateItemArgsSchema,
   UpdateItemArgsSchema,
   AppendToItemArgsSchema,
   DeleteItemArgsSchema,
   SearchContextsArgsSchema,
   ContextDiagnoseArgsSchema,
-  ContextMigrationBriefArgsSchema,
+  GetGuideArgsSchema,
 } from "./types.js";
 import * as storage from "./storage.js";
 import { searchContexts } from "./search.js";
@@ -27,23 +26,15 @@ const server = new McpServer(
   { name: "contexts-mcp", version: packageVersion() },
   {
     capabilities: { tools: {} },
-    instructions: [
-      "Persistent context folders for Claude Code sessions. A context is a folder holding items in any text format: md (default), txt, json, yaml, yml, csv, sql. Markdown items carry frontmatter (title, tags, timestamps); other kinds have only filesystem metadata. Contexts themselves can carry optional metadata (title, description, free-form status, tags, links) — good for both knowledge-base topics and unit-of-work folders.",
-      "",
-      "How to use this server:",
-      "- When the user asks about a topic that may already be logged, call search_contexts first before answering from scratch.",
-      "- When capturing a new finding, prefer append_to_item onto an existing topical context over creating a new one — contexts work best as growing logs.",
-      "- When exploring what's saved, call list_contexts with include_metadata=true so titles/status/tags are visible in one shot. Pass sort='recent_activity' when you want the recently-touched contexts first.",
-      "- Contexts with status='archived' are filtered out of list/search by default — pass include_archived=true to include them.",
-      "- Markdown is the right default for notes and prose. Only use json/yaml/csv/sql when the payload is structurally meaningful (and note that append_to_item is disabled for json/yaml/yml — use update_item to replace).",
-    ].join("\n"),
+    instructions:
+      "Persistent context folders for Claude Code sessions. A context is a folder holding items in md (default), txt, json, yaml, yml, csv, or sql. Markdown items carry frontmatter (title, tags, timestamps); other kinds carry only filesystem metadata. Contexts themselves can carry optional metadata (title, description, free-form status, tags, links). Prefer search_contexts before answering topics that may already be logged, and prefer append_to_item on an existing item over creating parallel items. Markdown supports mermaid fences (```mermaid) that render as SVG diagrams in the optional web UI — prefer them over hand-drawn ASCII art; call get_guide({ name: 'mermaid' }) for syntax.",
   }
 );
 
 const text = (value: string) => ({ content: [{ type: "text" as const, text: value }] });
 const json = (value: unknown) => text(JSON.stringify(value, null, 2));
 
-const MIGRATION_BRIEF = `# Migrating existing markdown into contexts-mcp
+const MIGRATION_GUIDE = `# Migrating existing markdown into contexts-mcp
 
 ## What this system is
 A **context** is a folder. An **item** is a single file inside that folder. Items can be: \`md\` (default), \`txt\`, \`json\`, \`yaml\`, \`yml\`, \`csv\`, or \`sql\`. Contexts are flat — no subfolders of items. A context may also carry its own metadata in a reserved \`_context.yaml\` file (never exposed as an item).
@@ -104,11 +95,110 @@ links:
 \`list_contexts\` → (for each source file) \`search_contexts\` to check for duplicates → \`create_context\` if new topic → \`create_item\` or \`append_to_item\` → \`update_context_metadata\` once items are in.
 `;
 
+const MERMAID_GUIDE = `# Diagrams in contexts-mcp (mermaid)
+
+Markdown items are rendered by the optional web UI (port 3141). Fenced code blocks tagged \`mermaid\` are converted to SVG diagrams client-side; everything else stays a plain code block.
+
+**When to reach for it:** flow, sequence, state, class, or ER diagrams that would otherwise be ASCII art. Mermaid is more compact, easier to edit, and renders as a real picture for the human reading the context later.
+
+**Fence it correctly.** The language must be exactly \`mermaid\`. \`mmd\`, uppercase variants, or an unlabeled fence will render as a code block, not a diagram.
+
+## Flowchart
+
+\`\`\`mermaid
+flowchart TD
+  A[User] --> B{Signed in?}
+  B -- yes --> C[Dashboard]
+  B -- no --> D[Login]
+  D --> A
+\`\`\`
+
+Directions: \`TD\` (top-down), \`LR\` (left-right), \`BT\`, \`RL\`. Node shapes: \`[rect]\`, \`(round)\`, \`([stadium])\`, \`{diamond}\`, \`((circle))\`.
+
+## Sequence
+
+\`\`\`mermaid
+sequenceDiagram
+  participant Browser
+  participant Frontend
+  participant Backend
+  participant SSO as EVE SSO
+  Browser->>Frontend: click login
+  Frontend->>Frontend: PKCE verifier + state
+  Frontend->>SSO: redirect login.eveonline.com
+  SSO-->>Browser: redirect w/ ?code
+  Browser->>Frontend: /callback
+  Frontend->>Backend: POST /api/auth/eve-callback
+  Backend->>SSO: exchange code
+  SSO-->>Backend: {access, refresh}
+  Backend-->>Frontend: {app JWT, account}
+\`\`\`
+
+Arrows: \`->>\` solid, \`-->>\` dashed, \`-x\` crossed (failed). \`Note over X,Y: text\` for annotations.
+
+## State
+
+\`\`\`mermaid
+stateDiagram-v2
+  [*] --> Draft
+  Draft --> Review: submit
+  Review --> Published: approve
+  Review --> Draft: reject
+  Published --> [*]
+\`\`\`
+
+## Entity relationship
+
+\`\`\`mermaid
+erDiagram
+  ACCOUNT ||--o{ SESSION : has
+  ACCOUNT {
+    uuid id PK
+    string email
+  }
+  SESSION {
+    uuid id PK
+    uuid account_id FK
+    timestamp expires_at
+  }
+\`\`\`
+
+Cardinality: \`||--o{\` one-to-many, \`||--||\` one-to-one, \`}o--o{\` many-to-many.
+
+## Class
+
+\`\`\`mermaid
+classDiagram
+  class Storage {
+    +getItem(context, name) Item
+    +createItem(context, name, opts)
+  }
+  class Item {
+    +name: string
+    +extension: string
+    +content: string
+  }
+  Storage --> Item : returns
+\`\`\`
+
+## Tips
+
+- Keep node labels short. Long labels wrap poorly and blow out the layout.
+- Indent inside the fence for readability — mermaid is whitespace-tolerant.
+- One diagram per fence. Multiple diagrams in one fence error out.
+- \`%% text\` is a mermaid comment inside the fence.
+- If a diagram renders as raw text in the web UI, check: (a) the fence language is exactly \`mermaid\`, (b) the syntax parses at https://mermaid.live, (c) no raw \`<\` or \`>\` in labels (escape or quote them).
+`;
+
+const GUIDES: Record<string, string> = {
+  migration: MIGRATION_GUIDE,
+  mermaid: MERMAID_GUIDE,
+};
+
 server.registerTool(
   "list_contexts",
   {
-    description:
-      "List all context folders. Pass include_metadata=true to also return each context's title/description/status/tags/links/last_activity. Pass sort='recent_activity' (or 'created' / 'updated') to order by time (most-recent first) instead of the default alphabetical. Archived contexts (status='archived') are filtered out unless include_archived=true.",
+    description: "List context folders. Opt into metadata and custom sort via params.",
     inputSchema: ListContextsArgsSchema.shape,
   },
   async (args) => {
@@ -124,8 +214,7 @@ server.registerTool(
 server.registerTool(
   "create_context",
   {
-    description:
-      "Create a new named context folder. Name must be alphanumeric with hyphens/underscores.",
+    description: "Create a new context folder.",
     inputSchema: CreateContextArgsSchema.shape,
   },
   async (args) => {
@@ -137,8 +226,7 @@ server.registerTool(
 server.registerTool(
   "delete_context",
   {
-    description:
-      "Delete a context folder and all items it contains. This is destructive and cannot be undone.",
+    description: "Delete a context folder and all its items. Destructive.",
     inputSchema: DeleteContextArgsSchema.shape,
   },
   async (args) => {
@@ -150,8 +238,7 @@ server.registerTool(
 server.registerTool(
   "get_context",
   {
-    description:
-      "Read a context's metadata: title, description, status, tags, links, and last_activity. Returns empty defaults for contexts that have no metadata set yet.",
+    description: "Read a context's metadata (title, description, status, tags, links, last_activity).",
     inputSchema: GetContextArgsSchema.shape,
   },
   async (args) => {
@@ -163,8 +250,7 @@ server.registerTool(
 server.registerTool(
   "update_context_metadata",
   {
-    description:
-      "Set or update a context's metadata. Only the fields you pass are changed; everything else is preserved. Use this to track unit-of-work state (status, links to tickets/PRs) or to give any context a human-readable title and description. Set status='archived' to archive a context — it'll be hidden from default list/search until you either clear the status or pass include_archived=true.",
+    description: "Patch a context's metadata. Only fields you pass are changed. Set status='archived' to archive.",
     inputSchema: UpdateContextMetadataArgsSchema.shape,
   },
   async (args) => {
@@ -177,8 +263,7 @@ server.registerTool(
 server.registerTool(
   "list_items",
   {
-    description:
-      "List all items in a context folder. Items may be markdown, txt, json, yaml, yml, csv, or sql. Markdown items carry title/tags from YAML frontmatter; other kinds have only filesystem metadata.",
+    description: "List items in a context folder.",
     inputSchema: ListItemsArgsSchema.shape,
   },
   async (args) => {
@@ -190,11 +275,15 @@ server.registerTool(
 server.registerTool(
   "get_item",
   {
-    description:
-      "Read a specific item's content. Markdown items return YAML frontmatter + body; other kinds return raw text. Pass 'extension' to disambiguate when two items share a base name.",
+    description: "Read an item. Default: parsed frontmatter + body for md, raw text otherwise. Pass raw=true for byte-for-byte contents as JSON.",
     inputSchema: GetItemArgsSchema.shape,
   },
   async (args) => {
+    if (args.raw) {
+      const raw = await storage.getItemRaw(args.context, args.item, args.extension);
+      return json(raw);
+    }
+
     const item = await storage.getItem(args.context, args.item, args.extension);
 
     if (item.extension === "md" && item.frontmatter) {
@@ -218,23 +307,9 @@ server.registerTool(
 );
 
 server.registerTool(
-  "get_item_raw",
-  {
-    description:
-      "Read an item's raw, byte-for-byte content as stored on disk — including YAML frontmatter for markdown. Returns {content, filename, contentType, extension, size}. Use this when you want the original file verbatim (e.g. to hand it to another tool) rather than the parsed structure get_item returns.",
-    inputSchema: GetItemRawArgsSchema.shape,
-  },
-  async (args) => {
-    const raw = await storage.getItemRaw(args.context, args.item, args.extension);
-    return json(raw);
-  }
-);
-
-server.registerTool(
   "create_item",
   {
-    description:
-      "Create a new item in a context. Extension defaults to 'md' — pass one of (md, txt, json, yaml, yml, csv, sql) to override. For markdown, also pass title and tags — they go into the YAML frontmatter. For other kinds, just pass content.",
+    description: "Create an item in a context. Extension defaults to md. For md, title/tags go into frontmatter.",
     inputSchema: CreateItemArgsSchema.shape,
   },
   async (args) => {
@@ -250,8 +325,7 @@ server.registerTool(
 server.registerTool(
   "update_item",
   {
-    description:
-      "Update an existing item. For markdown: title/tags/content may all be updated. For other kinds: only content may be updated. Auto-updates the 'updated' timestamp on markdown items.",
+    description: "Update an item. For md, title/tags/content may all change; for others, content only.",
     inputSchema: UpdateItemArgsSchema.shape,
   },
   async (args) => {
@@ -268,8 +342,7 @@ server.registerTool(
 server.registerTool(
   "append_to_item",
   {
-    description:
-      "Append content to an existing item. Supported for markdown, txt, csv, and sql. Errors for structured-data kinds (json/yaml/yml) — use update_item for those.",
+    description: "Append content to an item. Errors for json/yaml/yml — use update_item for those.",
     inputSchema: AppendToItemArgsSchema.shape,
   },
   async (args) => {
@@ -281,8 +354,7 @@ server.registerTool(
 server.registerTool(
   "delete_item",
   {
-    description:
-      "Delete a specific item from a context. Destructive — cannot be undone. If two items share a base name, pass 'extension' to disambiguate.",
+    description: "Delete an item from a context. Destructive.",
     inputSchema: DeleteItemArgsSchema.shape,
   },
   async (args) => {
@@ -294,8 +366,7 @@ server.registerTool(
 server.registerTool(
   "context_diagnose",
   {
-    description:
-      "Return server-side diagnostics: resolved data dir, config path, version, counts (contexts, archived contexts, items), total bytes on disk, and scan wall-clock. Cheap to call. Use this to confirm 'what data dir is this process actually reading?' when debugging, or to check whether an archival sweep would meaningfully reduce the working set.",
+    description: "Server diagnostics: data dir, config path, version, counts, total bytes, scan wall-clock.",
     inputSchema: ContextDiagnoseArgsSchema.shape,
   },
   async () => {
@@ -305,20 +376,18 @@ server.registerTool(
 );
 
 server.registerTool(
-  "context_migration_brief",
+  "get_guide",
   {
-    description:
-      "Return a guide explaining how to migrate existing markdown (and other text files) into this contexts-mcp server. Covers supported formats, naming rules, markdown frontmatter shape, _context.yaml metadata, recommended migration workflow, and common gotchas. Call this when a user wants to import an existing corpus of notes or docs into contexts.",
-    inputSchema: ContextMigrationBriefArgsSchema.shape,
+    description: "Return a built-in guide. Available: 'migration' (importing existing markdown corpora), 'mermaid' (writing diagrams that render as SVG in the web UI).",
+    inputSchema: GetGuideArgsSchema.shape,
   },
-  async () => text(MIGRATION_BRIEF)
+  async (args) => text(GUIDES[args.name])
 );
 
 server.registerTool(
   "search_contexts",
   {
-    description:
-      "Full-text search across all text items in all contexts. Pass just 'query' for a broad search; all filters are optional. Narrow with 'context' (one folder), 'tags' (per-item markdown tags), or 'context_status' / 'context_tags' (context-level metadata). Archived contexts are skipped unless include_archived=true.",
+    description: "Full-text search across all items. All filters optional — pass just 'query' for a broad search.",
     inputSchema: SearchContextsArgsSchema.shape,
   },
   async (args) => {

@@ -89,7 +89,7 @@ async function main(): Promise<void> {
     // after a repo move, instead of a separate install.ps1 step.
     if (process.platform === "win32") {
       const shortcutAnswer = (
-        await prompt(rl, "Create/refresh Desktop shortcut for the UI? [Y/n] ")
+        await prompt(rl, "Install Desktop shortcut 'Contexts.lnk' (overwrites if it exists)? [Y/n] ")
       ).trim().toLowerCase();
       if (shortcutAnswer === "" || shortcutAnswer.startsWith("y")) {
         const installPs1 = path.resolve(

@@ -19,6 +19,7 @@ import {
 import {
   layout,
   contextListPage,
+  contextListRegionFragment,
   contextCardFragment,
   contextMetaEditPage,
   itemListPage,
@@ -43,6 +44,9 @@ marked.use({
   renderer: {
     code({ text, lang }: { text: string; lang?: string }) {
       const language = (lang || "").trim().split(/\s+/)[0];
+      if (language === "mermaid") {
+        return `<div class="mermaid">${escHtml(text)}</div>`;
+      }
       const langAttr = language ? ` data-lang="${escHtml(language)}"` : "";
       const classAttr = language ? ` class="language-${escHtml(language)}"` : "";
       return `<pre${langAttr}><code${classAttr}>${escHtml(text)}\n</code></pre>`;
@@ -70,6 +74,15 @@ function parseTruthy(raw: unknown): boolean {
   return raw === "1" || raw === "true" || raw === "on";
 }
 
+// "all" (and missing/empty) means no filter; anything else is a literal
+// status string to match. Status is free-form, so no enum validation.
+function parseStatus(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed === "all") return undefined;
+  return trimmed;
+}
+
 function parseTags(raw: unknown): string[] {
   if (typeof raw !== "string") return [];
   return raw
@@ -83,19 +96,42 @@ function parseTags(raw: unknown): string[] {
 app.get("/", async (req, res) => {
   const sort = parseSort(req.query.sort);
   const showArchived = parseTruthy(req.query.show_archived);
-  const contexts = await storage.listContexts({
+  const statusFilter = parseStatus(req.query.status);
+
+  // One pass with metadata and archived included — gives us the raw
+  // catalog to compute the status vocabulary, the archived count, and
+  // the filtered view from. Avoids the old two-pass split between the
+  // rendered list and the archived count.
+  const all = await storage.listContexts({
     includeMetadata: true,
+    includeArchived: true,
     sort,
-    includeArchived: showArchived,
   });
-  // Second read only when needed: a separate call for archived count keeps
-  // the primary grid query cheap when the toggle is off.
-  let archivedCount = 0;
-  if (!showArchived) {
-    const all = await storage.listContexts({ includeMetadata: true, includeArchived: true });
-    archivedCount = all.filter((c) => c.metadata?.status === "archived").length;
+
+  const distinctStatuses = Array.from(
+    new Set(
+      all
+        .map((c) => c.metadata?.status)
+        .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+    )
+  ).sort();
+  const archivedCount = all.filter((c) => c.metadata?.status === "archived").length;
+
+  let visible: typeof all;
+  if (statusFilter) {
+    visible = all.filter((c) => c.metadata?.status === statusFilter);
+  } else if (showArchived) {
+    visible = all;
+  } else {
+    visible = all.filter((c) => c.metadata?.status !== "archived");
   }
-  res.send(contextListPage(contexts, { sort, showArchived, archivedCount }));
+
+  const controls = { sort, showArchived, archivedCount, distinctStatuses, statusFilter };
+  if (req.get("HX-Request") === "true") {
+    res.send(contextListRegionFragment(visible, controls));
+    return;
+  }
+  res.send(contextListPage(visible, controls));
 });
 
 app.post("/ctx", async (req, res) => {

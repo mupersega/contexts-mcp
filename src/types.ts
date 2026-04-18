@@ -108,132 +108,117 @@ export const ListContextsArgsSchema = z.object({
     .boolean()
     .optional()
     .default(false)
-    .describe("If true, also return title, description, status, tags, links, and last_activity for each context. Slightly slower."),
+    .describe("Include title, description, status, tags, links, last_activity per context."),
   sort: ListContextsSortSchema
     .optional()
     .default("name")
-    .describe("Sort order. 'name' (default, alphabetical) or 'recent_activity' | 'created' | 'updated' (most-recent first)."),
+    .describe("'name' (alphabetical) or 'recent_activity' | 'created' | 'updated' (most-recent first)."),
   include_archived: z
     .boolean()
     .optional()
     .default(false)
-    .describe("If false (default), contexts with status='archived' are filtered out. Set true to include them."),
+    .describe("Include contexts with status='archived'. Default false."),
 });
 
 export const CreateContextArgsSchema = z.object({
   name: z
     .string()
-    .regex(CONTEXT_NAME_REGEX, "Must be alphanumeric with hyphens/underscores only")
-    .describe("Name of the context folder to create"),
+    .regex(CONTEXT_NAME_REGEX, "Must be alphanumeric with hyphens/underscores only"),
 });
 
 export const DeleteContextArgsSchema = z.object({
-  name: z.string().describe("Name of the context folder to delete"),
+  name: z.string(),
 });
 
 export const GetContextArgsSchema = z.object({
-  name: z.string().describe("Name of the context folder"),
+  name: z.string(),
 });
 
 export const UpdateContextMetadataArgsSchema = z.object({
-  name: z.string().describe("Name of the context folder"),
-  title: z.string().optional().describe("Human-readable title"),
-  description: z.string().optional().describe("Short description"),
+  name: z.string(),
+  title: z.string().optional(),
+  description: z.string().optional(),
   status: z
     .string()
     .optional()
-    .describe("Free-form working status (e.g. pending, in-progress, pr, done)"),
-  tags: z.array(z.string()).optional().describe("Context-level tags"),
+    .describe("Free-form working status (e.g. pending, in-progress, pr, done, archived)."),
+  tags: z.array(z.string()).optional(),
   links: z
     .array(ContextLinkSchema)
     .optional()
-    .describe("Array of {label, url} — e.g. Jira ticket, PR, design doc"),
+    .describe("Array of {label, url} — e.g. Jira ticket, PR, design doc."),
 });
 
 export const ListItemsArgsSchema = z.object({
-  context: z.string().describe("Name of the context folder"),
+  context: z.string(),
 });
 
 export const GetItemArgsSchema = z.object({
-  context: z.string().describe("Name of the context folder"),
-  item: z.string().describe("Item base name (without extension)"),
+  context: z.string(),
+  item: z.string().describe("Item base name (without extension)."),
   extension: ItemExtensionSchema
     .optional()
-    .describe("Optional extension disambiguator if two items share a base name"),
+    .describe("Disambiguator when two items share a base name."),
+  raw: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("If true, return byte-for-byte file contents (incl. frontmatter for md) as JSON."),
 });
 
 export const CreateItemArgsSchema = z.object({
-  context: z.string().describe("Name of the context folder"),
+  context: z.string(),
   item: z
     .string()
     .regex(ITEM_NAME_REGEX, "Must start with a letter or digit; letters, digits, hyphens, underscores only")
-    .describe("Item base name (without extension)"),
-  extension: ItemExtensionSchema
-    .default("md")
-    .describe("File kind — determines how the item is stored"),
-  title: z.string().optional().describe("Title for markdown frontmatter (md only)"),
+    .describe("Item base name (without extension)."),
+  extension: ItemExtensionSchema.default("md"),
+  title: z.string().optional().describe("Markdown frontmatter title (md only)."),
   tags: z
     .array(z.string())
     .default([])
-    .describe("Tags for markdown frontmatter (md only)"),
-  content: z.string().default("").describe("File content. For md, body only; for others, raw text."),
+    .describe("Markdown frontmatter tags (md only)."),
+  content: z.string().default("").describe("For md, body only; for others, raw text."),
 });
 
 export const UpdateItemArgsSchema = z.object({
-  context: z.string().describe("Name of the context folder"),
-  item: z.string().describe("Item base name (without extension)"),
+  context: z.string(),
+  item: z.string().describe("Item base name (without extension)."),
   extension: ItemExtensionSchema.optional(),
-  title: z.string().optional().describe("New title (md only)"),
-  tags: z.array(z.string()).optional().describe("New tags (md only)"),
-  content: z.string().optional().describe("New content (replaces existing body)"),
+  title: z.string().optional().describe("New title (md only)."),
+  tags: z.array(z.string()).optional().describe("New tags (md only)."),
+  content: z.string().optional(),
 });
 
 export const AppendToItemArgsSchema = z.object({
-  context: z.string().describe("Name of the context folder"),
-  item: z.string().describe("Item base name (without extension)"),
+  context: z.string(),
+  item: z.string().describe("Item base name (without extension)."),
   extension: ItemExtensionSchema.optional(),
-  content: z.string().describe("Content to append."),
+  content: z.string(),
 });
 
 export const DeleteItemArgsSchema = z.object({
-  context: z.string().describe("Name of the context folder"),
-  item: z.string().describe("Item base name (without extension)"),
+  context: z.string(),
+  item: z.string().describe("Item base name (without extension)."),
   extension: ItemExtensionSchema.optional(),
 });
 
 export const SearchContextsArgsSchema = z.object({
-  query: z.string().describe("Search query string"),
-  context: z
-    .string()
-    .optional()
-    .describe("Limit search to a specific context folder"),
-  tags: z
-    .array(z.string())
-    .optional()
-    .describe("Filter by per-item tags (markdown items only)"),
-  context_status: z
-    .string()
-    .optional()
-    .describe("Only search contexts whose metadata status matches this value"),
-  context_tags: z
-    .array(z.string())
-    .optional()
-    .describe("Only search contexts whose metadata tags include any of these"),
+  query: z.string(),
+  context: z.string().optional().describe("Limit to a specific context folder."),
+  tags: z.array(z.string()).optional().describe("Filter by per-item markdown tags."),
+  context_status: z.string().optional().describe("Only search contexts whose metadata status matches."),
+  context_tags: z.array(z.string()).optional().describe("Only search contexts whose metadata tags include any of these."),
   include_archived: z
     .boolean()
     .optional()
     .default(false)
-    .describe("If false (default), contexts with status='archived' are skipped. Set true to include them."),
-});
-
-export const GetItemRawArgsSchema = z.object({
-  context: z.string().describe("Name of the context folder"),
-  item: z.string().describe("Item base name (without extension)"),
-  extension: ItemExtensionSchema
-    .optional()
-    .describe("Optional extension disambiguator if two items share a base name"),
+    .describe("Include archived contexts. Default false."),
 });
 
 export const ContextDiagnoseArgsSchema = z.object({});
 
-export const ContextMigrationBriefArgsSchema = z.object({});
+export const GUIDE_NAMES = ["migration", "mermaid"] as const;
+export const GetGuideArgsSchema = z.object({
+  name: z.enum(GUIDE_NAMES),
+});

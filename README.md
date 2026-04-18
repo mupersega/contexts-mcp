@@ -101,7 +101,7 @@ Per-item actions on the UI:
 - **Raw** — toggles a rendered/raw view (useful for eyeballing frontmatter before copying).
 - Context-level **Download .zip** from the context page.
 
-The small palette icon in the top-right opens `/theme` — a theme lab with six knobs (accent, palette, corners, chrome, motion, complement), six named presets, and a **Roll the dice** randomizer. Choices persist per browser in `localStorage`.
+The small palette icon in the top-right opens `/theme` — a theme lab with six knobs (accent, palette, corners, chrome, motion, complement), six named presets, and a **Scramble** randomizer. Choices persist per browser in `localStorage`.
 
 ### Windows convenience (optional)
 

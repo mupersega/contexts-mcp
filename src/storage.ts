@@ -536,7 +536,7 @@ export interface RawItem {
 // Full, byte-for-byte content of an item as stored on disk — including YAML
 // frontmatter for markdown. Distinct from getItem(), which strips frontmatter
 // from md and returns it as a separate field. Used by the UI's Download button
-// and by the `get_item_raw` MCP tool.
+// and by `get_item` when called with raw=true.
 export async function getItemRaw(
   context: string,
   base: string,
