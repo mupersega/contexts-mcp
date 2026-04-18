@@ -4,6 +4,21 @@ A local MCP server (with optional web UI) for **persistent context folders** sha
 
 Storage is plain files on disk under a single data directory, so contexts are easy to inspect, back up, or sync with any tool you already use.
 
+**Contents**
+
+- [One command you actually need to remember](#one-command-you-actually-need-to-remember)
+- [First-time setup](#first-time-setup)
+- [How it resolves configuration](#how-it-resolves-configuration)
+  - [Pointing the MCP at a different data dir](#pointing-the-mcp-at-a-different-data-dir)
+- [Web UI (optional)](#web-ui-optional)
+  - [Windows convenience (optional)](#windows-convenience-optional)
+- [Data model — quick reference](#data-model--quick-reference)
+- [MCP tools](#mcp-tools)
+- [Automation: keep contexts updated without thinking about it](#automation-keep-contexts-updated-without-thinking-about-it)
+  - [Option A — a Skill (recommended default)](#option-a--a-skill-recommended-default)
+  - [Option B — a Stop hook (for deterministic end-of-turn reminders)](#option-b--a-stop-hook-for-deterministic-end-of-turn-reminders)
+- [Development](#development)
+
 ---
 
 ## One command you actually need to remember
