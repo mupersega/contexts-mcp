@@ -88,6 +88,35 @@ function resolveItemPath(
   return resolved;
 }
 
+// Sibling dotfile holding the previous version of an item. Dotfile prefix means
+// splitItemFilename() (and therefore listings, search, the UI, and zip export)
+// excludes it automatically — no extra filtering needed.
+function backupPathFor(itemPath: string): string {
+  const dir = path.dirname(itemPath);
+  const filename = path.basename(itemPath);
+  return path.resolve(dir, `.${filename}.bak`);
+}
+
+// Atomically rotate the current item file into its backup slot, overwriting any
+// prior backup. fs.rename is atomic on POSIX and on NTFS within a volume; we
+// always rename within the same context dir, so this is safe on both.
+// No-op if the source file does not exist (caller may be writing a new file).
+async function snapshotItem(itemPath: string): Promise<void> {
+  const backupPath = backupPathFor(itemPath);
+  try {
+    await fs.rename(itemPath, backupPath);
+  } catch (err: unknown) {
+    if (
+      err instanceof Error &&
+      "code" in err &&
+      (err as NodeJS.ErrnoException).code === "ENOENT"
+    ) {
+      return;
+    }
+    throw err;
+  }
+}
+
 function resolveContextMetaPath(contextName: string): string {
   const contextDir = resolveContextPath(contextName);
   const resolved = path.resolve(contextDir, CONTEXT_META_FILENAME);
@@ -635,6 +664,7 @@ export async function updateItem(
 
     const body = updates.content !== undefined ? updates.content : parsed.content;
     const output = matter.stringify(body, meta);
+    await snapshotItem(filePath);
     await writeFileAtomic(filePath, output);
     await touchContext(context);
     return;
@@ -648,6 +678,7 @@ export async function updateItem(
   if (updates.content === undefined) {
     throw new Error(`No content provided to update '${base}.${ext}'`);
   }
+  await snapshotItem(filePath);
   await writeFileAtomic(filePath, updates.content);
   await touchContext(context);
 }
@@ -676,6 +707,7 @@ export async function appendToItem(
 
     const body = parsed.content + "\n\n" + newContent;
     const output = matter.stringify(body, meta);
+    await snapshotItem(filePath);
     await writeFileAtomic(filePath, output);
     await touchContext(context);
     return;
@@ -683,6 +715,7 @@ export async function appendToItem(
 
   const existing = await fs.readFile(filePath, "utf-8").catch(() => "");
   const sep = existing.length === 0 || existing.endsWith("\n") ? "" : "\n";
+  await snapshotItem(filePath);
   await writeFileAtomic(filePath, existing + sep + newContent);
   await touchContext(context);
 }
@@ -698,6 +731,51 @@ export async function deleteItem(
   await touchContext(context).catch(() => {
     // If _context.yaml write fails after item delete, don't fail the delete.
   });
+}
+
+// One-shot revert: swap the current item with its `.foo.md.bak` snapshot.
+// The revert itself is not snapshotted, so you cannot un-revert.
+export async function revertItem(
+  context: string,
+  base: string,
+  preferred?: ItemExtension
+): Promise<{ name: string; extension: ItemExtension }> {
+  const ext = await findItemExtension(context, base, preferred);
+  const filePath = resolveItemPath(context, base, ext);
+  const backupPath = backupPathFor(filePath);
+
+  try {
+    await fs.access(backupPath);
+  } catch {
+    throw new Error(
+      `No previous version available for '${base}.${ext}' in context '${context}'`
+    );
+  }
+
+  await fs.rename(backupPath, filePath);
+  await touchContext(context);
+  return { name: base, extension: ext };
+}
+
+export async function hasBackup(
+  context: string,
+  base: string,
+  preferred?: ItemExtension
+): Promise<boolean> {
+  let ext: ItemExtension;
+  try {
+    ext = await findItemExtension(context, base, preferred);
+  } catch {
+    return false;
+  }
+  const filePath = resolveItemPath(context, base, ext);
+  const backupPath = backupPathFor(filePath);
+  try {
+    await fs.access(backupPath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // --- Diagnostics ---

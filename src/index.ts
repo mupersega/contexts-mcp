@@ -14,6 +14,7 @@ import {
   UpdateItemArgsSchema,
   AppendToItemArgsSchema,
   DeleteItemArgsSchema,
+  RevertItemArgsSchema,
   SearchContextsArgsSchema,
   ContextDiagnoseArgsSchema,
   GetGuideArgsSchema,
@@ -360,6 +361,18 @@ server.registerTool(
   async (args) => {
     await storage.deleteItem(args.context, args.item, args.extension);
     return text(`Item '${args.item}' deleted.`);
+  }
+);
+
+server.registerTool(
+  "revert_item",
+  {
+    description: "Restore the previous version of an item from its automatic snapshot. Each update_item or append_to_item call rotates the prior content into a single backup slot; revert swaps that snapshot back into place. One-shot — the revert itself is not snapshotted. Errors if no snapshot exists.",
+    inputSchema: RevertItemArgsSchema.shape,
+  },
+  async (args) => {
+    const reverted = await storage.revertItem(args.context, args.item, args.extension);
+    return text(`Item '${reverted.name}.${reverted.extension}' reverted to previous version.`);
   }
 );
 

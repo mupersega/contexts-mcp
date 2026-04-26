@@ -308,6 +308,7 @@ app.get("/ctx/:context/:item", async (req, res) => {
       contentHtml = escHtml(item.content);
     }
     const fm = item.frontmatter;
+    const hasBackup = await storage.hasBackup(context, itemName, item.extension);
     res.send(
       itemViewPage(
         context,
@@ -320,6 +321,7 @@ app.get("/ctx/:context/:item", async (req, res) => {
         contentHtml,
         isMarkdown,
         rawMode,
+        hasBackup,
       )
     );
   } catch (err: unknown) {
@@ -394,6 +396,21 @@ app.delete("/ctx/:context/:item", async (req, res) => {
     const { context, item: itemName } = req.params;
     const preferred = parseExtQuery(req.query.ext);
     await storage.deleteItem(context, itemName, preferred);
+    res.send("");
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(400).send(`<div class="flash flash-error">${escHtml(msg)}</div>`);
+  }
+});
+
+// One-shot revert. Redirects back to the item view so the breadcrumb, tags,
+// and the freshly-recomputed hasBackup flag (now false) re-render correctly.
+app.post("/ctx/:context/:item/revert", async (req, res) => {
+  try {
+    const { context, item: itemName } = req.params;
+    const preferred = parseExtQuery(req.query.ext);
+    const reverted = await storage.revertItem(context, itemName, preferred);
+    res.setHeader("HX-Redirect", `/ctx/${context}/${itemName}?ext=${reverted.extension}`);
     res.send("");
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);

@@ -649,6 +649,7 @@ export function itemViewPage(
   contentHtml: string,
   isMarkdown: boolean,
   rawMode: boolean = false,
+  hasBackup: boolean = false,
 ): string {
   const appendSupported =
     !rawMode && (isMarkdown || extension === "txt" || extension === "csv" || extension === "sql");
@@ -693,6 +694,7 @@ export function itemViewPage(
         <a class="btn btn-sm" href="${rawUrl}&amp;download=1">Download</a>
         <a class="btn btn-sm" href="${rawToggleHref}">${rawToggleLabel}</a>
         <a href="/ctx/${esc(context)}/${esc(name)}/edit?ext=${esc(extension)}" class="btn btn-sm">Edit</a>
+        ${hasBackup ? `<button type="button" class="btn btn-sm btn-danger" hx-post="/ctx/${esc(context)}/${esc(name)}/revert?ext=${esc(extension)}" hx-confirm="Revert '${esc(name)}.${esc(extension)}' to previous version? This is one-shot." title="Restore the previous version. One-shot — cannot be undone.">Revert</button>` : ""}
       </div>
     </div>
     <div class="${contentClass}" id="doc-body">${contentHtml}</div>

@@ -203,6 +203,12 @@ export const DeleteItemArgsSchema = z.object({
   extension: ItemExtensionSchema.optional(),
 });
 
+export const RevertItemArgsSchema = z.object({
+  context: z.string(),
+  item: z.string().describe("Item base name (without extension)."),
+  extension: ItemExtensionSchema.optional(),
+});
+
 export const SearchContextsArgsSchema = z.object({
   query: z.string(),
   context: z.string().optional().describe("Limit to a specific context folder."),
