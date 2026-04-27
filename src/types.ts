@@ -123,7 +123,7 @@ export const ListContextsArgsSchema = z.object({
 export const CreateContextArgsSchema = z.object({
   name: z
     .string()
-    .regex(CONTEXT_NAME_REGEX, "Must be alphanumeric with hyphens/underscores only"),
+    .regex(CONTEXT_NAME_REGEX, "No spaces or punctuation. Letters, digits, hyphens, and underscores only (e.g. 'my-context-name')."),
 });
 
 export const DeleteContextArgsSchema = z.object({
@@ -170,7 +170,7 @@ export const CreateItemArgsSchema = z.object({
   context: z.string(),
   item: z
     .string()
-    .regex(ITEM_NAME_REGEX, "Must start with a letter or digit; letters, digits, hyphens, underscores only")
+    .regex(ITEM_NAME_REGEX, "No spaces or punctuation. Must start with a letter or digit; then letters, digits, hyphens, and underscores only (e.g. 'architecture-notes').")
     .describe("Item base name (without extension)."),
   extension: ItemExtensionSchema.default("md"),
   title: z.string().optional().describe("Markdown frontmatter title (md only)."),

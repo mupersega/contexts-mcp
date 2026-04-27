@@ -138,7 +138,7 @@ app.post("/ctx", async (req, res) => {
   try {
     const name = req.body.name?.trim();
     if (!name || !CONTEXT_NAME_REGEX.test(name)) {
-      res.status(400).send(`<div class="flash flash-error">Invalid name. Use letters, numbers, hyphens, underscores.</div>`);
+      res.status(400).send(`<div class="flash flash-error">Invalid name — no spaces or punctuation. Use letters, numbers, hyphens, and underscores only (e.g. <code>my-context-name</code>).</div>`);
       return;
     }
     await storage.createContext(name);
