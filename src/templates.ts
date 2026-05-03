@@ -533,7 +533,7 @@ export function contextCardFragment(summary: ContextSummary): string {
     <div class="card" id="ctx-${esc(summary.name)}">${renderContextCardBody(summary)}</div>`;
 }
 
-export function contextMetaHeader(name: string, meta: ContextMetadata): string {
+function contextMetaHeader(name: string, meta: ContextMetadata): string {
   const title = meta.title && meta.title.trim().length > 0 ? meta.title : name;
   const showSlug = title !== name;
   const description = meta.description

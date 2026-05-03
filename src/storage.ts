@@ -30,12 +30,6 @@ export function getDataDir(): string {
   return dataDir();
 }
 
-// Test / setup CLI hook — storage queries loadConfig() once, so if the config
-// file is rewritten after startup we need a way to bust the cache.
-export function resetDataDirCache(): void {
-  _cachedDataDir = null;
-}
-
 export const VERSION_STAMP_FILENAME = ".contexts-mcp-version";
 
 // --- Atomic write ---
@@ -149,7 +143,7 @@ function splitItemFilename(filename: string): ParsedItemFilename | null {
   return { base, ext };
 }
 
-export function contentTypeFor(ext: ItemExtension): string {
+function contentTypeFor(ext: ItemExtension): string {
   switch (ext) {
     case "md":
       return "text/markdown; charset=utf-8";
@@ -587,6 +581,30 @@ export async function getItemRaw(
   };
 }
 
+async function fileExists(p: string): Promise<boolean> {
+  try {
+    await fs.access(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function buildItemContent(
+  base: string,
+  ext: ItemExtension,
+  opts: { title?: string; tags?: string[]; content?: string }
+): string {
+  if (ext !== "md") return opts.content || "";
+  const now = new Date().toISOString();
+  return matter.stringify(opts.content || "", {
+    title: opts.title || base,
+    tags: opts.tags || [],
+    created: now,
+    updated: now,
+  });
+}
+
 export async function createItem(
   context: string,
   base: string,
@@ -602,41 +620,17 @@ export async function createItem(
     throw new Error(`Reserved filename: '${CONTEXT_META_FILENAME}'`);
   }
 
-  const dir = resolveContextPath(context);
-  await fs.access(dir).catch(() => {
+  if (!(await fileExists(resolveContextPath(context)))) {
     throw new Error(`Context '${context}' not found`);
-  });
+  }
 
   const filePath = resolveItemPath(context, base, ext);
-  try {
-    await fs.access(filePath);
-    throw new Error(
-      `Item '${base}.${ext}' already exists in context '${context}'`
-    );
-  } catch (err: unknown) {
-    if (
-      err instanceof Error &&
-      "code" in err &&
-      (err as NodeJS.ErrnoException).code === "ENOENT"
-    ) {
-      if (ext === "md") {
-        const now = new Date().toISOString();
-        const frontmatter = {
-          title: opts.title || base,
-          tags: opts.tags || [],
-          created: now,
-          updated: now,
-        };
-        const output = matter.stringify(opts.content || "", frontmatter);
-        await writeFileAtomic(filePath, output);
-      } else {
-        await writeFileAtomic(filePath, opts.content || "");
-      }
-      await touchContext(context);
-      return;
-    }
-    throw err;
+  if (await fileExists(filePath)) {
+    throw new Error(`Item '${base}.${ext}' already exists in context '${context}'`);
   }
+
+  await writeFileAtomic(filePath, buildItemContent(base, ext, opts));
+  await touchContext(context);
 }
 
 export async function updateItem(
@@ -791,6 +785,37 @@ export interface Diagnostics {
   lastScanMs: number;
 }
 
+async function scanContextStats(
+  dataDir: string,
+  name: string
+): Promise<{ archived: boolean; items: number; bytes: number }> {
+  let meta: ContextMetadata | null = null;
+  try {
+    meta = await getContextMetadata(name);
+  } catch {
+    meta = null;
+  }
+  const archived = isArchived(meta || undefined);
+
+  let ents: string[];
+  try {
+    ents = await fs.readdir(path.join(dataDir, name));
+  } catch {
+    return { archived, items: 0, bytes: 0 };
+  }
+
+  let items = 0;
+  let bytes = 0;
+  for (const ent of ents) {
+    if (!splitItemFilename(ent)) continue;
+    const st = await fs.stat(path.join(dataDir, name, ent)).catch(() => null);
+    if (!st || !st.isFile()) continue;
+    items += 1;
+    bytes += st.size;
+  }
+  return { archived, items, bytes };
+}
+
 export async function getDiagnostics(): Promise<Diagnostics> {
   const cfg = loadConfig();
   const start = Date.now();
@@ -803,28 +828,10 @@ export async function getDiagnostics(): Promise<Diagnostics> {
   let totalBytes = 0;
 
   for (const name of ctxNames) {
-    let meta: ContextMetadata | null = null;
-    try {
-      meta = await getContextMetadata(name);
-    } catch {
-      meta = null;
-    }
-    if (isArchived(meta || undefined)) archivedCount += 1;
-
-    let ents: string[];
-    try {
-      ents = await fs.readdir(path.join(cfg.dataDir, name));
-    } catch {
-      continue;
-    }
-    for (const ent of ents) {
-      const parsed = splitItemFilename(ent);
-      if (!parsed) continue;
-      const st = await fs.stat(path.join(cfg.dataDir, name, ent)).catch(() => null);
-      if (!st || !st.isFile()) continue;
-      itemCount += 1;
-      totalBytes += st.size;
-    }
+    const stats = await scanContextStats(cfg.dataDir, name);
+    if (stats.archived) archivedCount += 1;
+    itemCount += stats.items;
+    totalBytes += stats.bytes;
   }
 
   return {
@@ -841,4 +848,4 @@ export async function getDiagnostics(): Promise<Diagnostics> {
 
 // --- Re-exports for convenience ---
 
-export { findItemExtension, isSupportedExtension, splitItemFilename };
+export { findItemExtension, splitItemFilename };

@@ -81,44 +81,44 @@ function readConfigFile(): Partial<ContextsConfig> | null {
 
 let _cached: ResolvedConfig | null = null;
 
+function resolveDataDir(
+  envData: string,
+  cfg: Partial<ContextsConfig> | null
+): { value: string; source: "env" | "config" } {
+  if (envData) return { value: path.resolve(envData), source: "env" };
+  if (cfg && typeof cfg.dataDir === "string" && cfg.dataDir.trim().length > 0) {
+    return { value: path.resolve(cfg.dataDir), source: "config" };
+  }
+  throw new MissingDataDirError();
+}
+
+function resolveUiPort(
+  envPort: string,
+  cfg: Partial<ContextsConfig> | null
+): { value: number; source: "env" | "config" | "default" } {
+  if (envPort) {
+    const n = parseInt(envPort, 10);
+    if (Number.isFinite(n) && n > 0) return { value: n, source: "env" };
+  }
+  if (cfg && typeof cfg.uiPort === "number" && cfg.uiPort > 0) {
+    return { value: cfg.uiPort, source: "config" };
+  }
+  return { value: DEFAULT_UI_PORT, source: "default" };
+}
+
 export function loadConfig(): ResolvedConfig {
   if (_cached) return _cached;
 
   const cfg = readConfigFile();
-  const envData = process.env.CONTEXTS_DATA_DIR?.trim() || "";
-  const envPort = process.env.CONTEXTS_UI_PORT?.trim() || "";
-
-  let dataDir = "";
-  let dataDirSource: "env" | "config" = "config";
-  if (envData) {
-    dataDir = path.resolve(envData);
-    dataDirSource = "env";
-  } else if (cfg && typeof cfg.dataDir === "string" && cfg.dataDir.trim().length > 0) {
-    dataDir = path.resolve(cfg.dataDir);
-    dataDirSource = "config";
-  } else {
-    throw new MissingDataDirError();
-  }
-
-  let uiPort = DEFAULT_UI_PORT;
-  let uiPortSource: "env" | "config" | "default" = "default";
-  if (envPort) {
-    const n = parseInt(envPort, 10);
-    if (Number.isFinite(n) && n > 0) {
-      uiPort = n;
-      uiPortSource = "env";
-    }
-  } else if (cfg && typeof cfg.uiPort === "number" && cfg.uiPort > 0) {
-    uiPort = cfg.uiPort;
-    uiPortSource = "config";
-  }
+  const dataDir = resolveDataDir(process.env.CONTEXTS_DATA_DIR?.trim() || "", cfg);
+  const uiPort = resolveUiPort(process.env.CONTEXTS_UI_PORT?.trim() || "", cfg);
 
   _cached = {
-    dataDir,
-    uiPort,
+    dataDir: dataDir.value,
+    uiPort: uiPort.value,
     version: CONFIG_SCHEMA_VERSION,
     configPath: configPath(),
-    source: { dataDir: dataDirSource, uiPort: uiPortSource },
+    source: { dataDir: dataDir.source, uiPort: uiPort.source },
   };
   return _cached;
 }
@@ -135,10 +135,6 @@ export function writeConfig(patch: Partial<ContextsConfig>): ContextsConfig {
   fs.writeFileSync(p, JSON.stringify(merged, null, 2) + "\n", "utf-8");
   _cached = null;
   return merged;
-}
-
-export function resetConfigCache(): void {
-  _cached = null;
 }
 
 export function packageVersion(): string {

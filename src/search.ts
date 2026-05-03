@@ -23,29 +23,77 @@ export interface SearchOptions {
   includeArchived?: boolean;
 }
 
+interface ContextMetaFilter {
+  includeArchived: boolean;
+  contextStatusLower?: string;
+  contextTagsLower?: string[];
+}
+
+interface ItemContent {
+  title: string;
+  tags: string[];
+  fullText: string;
+}
+
+async function selectContexts(dataDir: string, contextFilter?: string): Promise<string[]> {
+  if (contextFilter) return [contextFilter];
+  const entries = await fs.readdir(dataDir, { withFileTypes: true });
+  return entries.filter((e) => e.isDirectory()).map((e) => e.name);
+}
+
+function passesContextMeta(meta: ContextMetadata | null, f: ContextMetaFilter): boolean {
+  if (!f.includeArchived && meta && meta.status === "archived") return false;
+  if (f.contextStatusLower !== undefined) {
+    if (!meta || !meta.status || meta.status.toLowerCase() !== f.contextStatusLower) {
+      return false;
+    }
+  }
+  if (f.contextTagsLower) {
+    if (!meta) return false;
+    const metaTagsLower = meta.tags.map((t) => t.toLowerCase());
+    if (!f.contextTagsLower.some((t) => metaTagsLower.includes(t))) return false;
+  }
+  return true;
+}
+
+function extractItemContent(
+  raw: string,
+  parsed: { base: string; ext: ItemExtension },
+  tagFilterLower?: string[]
+): ItemContent | null {
+  if (parsed.ext === "md") {
+    const fm = matter(raw);
+    const meta = fm.data as { title?: string; tags?: string[] };
+    const tags = Array.isArray(meta.tags) ? meta.tags : [];
+    if (tagFilterLower && tagFilterLower.length > 0) {
+      const docTagsLower = tags.map((t) => t.toLowerCase());
+      if (!tagFilterLower.some((t) => docTagsLower.includes(t))) return null;
+    }
+    const title = meta.title || parsed.base;
+    return { title, tags, fullText: [title, tags.join(" "), fm.content].join("\n") };
+  }
+  if (tagFilterLower && tagFilterLower.length > 0) return null;
+  return { title: parsed.base, tags: [], fullText: raw };
+}
+
 export async function searchContexts(
   dataDir: string,
   query: string,
   opts: SearchOptions = {}
 ): Promise<SearchResult[]> {
-  const results: SearchResult[] = [];
   const queryLower = query.toLowerCase();
-
-  let contexts: string[];
-  if (opts.contextFilter) {
-    contexts = [opts.contextFilter];
-  } else {
-    const entries = await fs.readdir(dataDir, { withFileTypes: true });
-    contexts = entries.filter((e) => e.isDirectory()).map((e) => e.name);
-  }
-
-  const filterByStatus = opts.contextStatus !== undefined;
-  const filterByContextTags = opts.contextTagFilter && opts.contextTagFilter.length > 0;
   const includeArchived = opts.includeArchived === true;
   const contextStatusLower = opts.contextStatus?.toLowerCase();
   const contextTagsLower = opts.contextTagFilter?.map((t) => t.toLowerCase());
+  const tagFilterLower = opts.tagFilter?.map((t) => t.toLowerCase());
+  const metaFilter: ContextMetaFilter = { includeArchived, contextStatusLower, contextTagsLower };
+  const needsMeta =
+    contextStatusLower !== undefined ||
+    (contextTagsLower !== undefined && contextTagsLower.length > 0) ||
+    !includeArchived;
 
-  const needsMeta = filterByStatus || filterByContextTags || !includeArchived;
+  const contexts = await selectContexts(dataDir, opts.contextFilter);
+  const results: SearchResult[] = [];
 
   for (const ctx of contexts) {
     const ctxPath = path.join(dataDir, ctx);
@@ -57,19 +105,7 @@ export async function searchContexts(
       } catch {
         meta = null;
       }
-      if (!includeArchived && meta && meta.status === "archived") continue;
-      if (filterByStatus) {
-        if (!meta || !meta.status || meta.status.toLowerCase() !== contextStatusLower) {
-          continue;
-        }
-      }
-      if (filterByContextTags && contextTagsLower) {
-        if (!meta) continue;
-        const metaTagsLower = meta.tags.map((t) => t.toLowerCase());
-        if (!contextTagsLower.some((t) => metaTagsLower.includes(t))) {
-          continue;
-        }
-      }
+      if (!passesContextMeta(meta, metaFilter)) continue;
     }
 
     let entries: string[];
@@ -83,49 +119,23 @@ export async function searchContexts(
       const parsed = splitItemFilename(entry);
       if (!parsed) continue;
 
-      const filePath = path.join(ctxPath, entry);
-      const raw = await fs.readFile(filePath, "utf-8");
+      const raw = await fs.readFile(path.join(ctxPath, entry), "utf-8");
+      const content = extractItemContent(raw, parsed, tagFilterLower);
+      if (!content) continue;
 
-      let itemTitle: string;
-      let itemTags: string[];
-      let fullText: string;
+      const matchingLines = content.fullText
+        .split("\n")
+        .filter((line) => line.toLowerCase().includes(queryLower));
+      if (matchingLines.length === 0) continue;
 
-      if (parsed.ext === "md") {
-        const fm = matter(raw);
-        const meta = fm.data as { title?: string; tags?: string[] };
-        itemTags = Array.isArray(meta.tags) ? meta.tags : [];
-
-        if (opts.tagFilter && opts.tagFilter.length > 0) {
-          const docTagsLower = itemTags.map((t) => t.toLowerCase());
-          if (!opts.tagFilter.some((t) => docTagsLower.includes(t.toLowerCase()))) {
-            continue;
-          }
-        }
-
-        itemTitle = meta.title || parsed.base;
-        fullText = [itemTitle, itemTags.join(" "), fm.content].join("\n");
-      } else {
-        if (opts.tagFilter && opts.tagFilter.length > 0) continue;
-        itemTitle = parsed.base;
-        itemTags = [];
-        fullText = raw;
-      }
-
-      const lines = fullText.split("\n");
-      const matchingLines = lines.filter((line) =>
-        line.toLowerCase().includes(queryLower)
-      );
-
-      if (matchingLines.length > 0) {
-        results.push({
-          context: ctx,
-          item: parsed.base,
-          extension: parsed.ext,
-          title: itemTitle,
-          tags: itemTags,
-          matches: matchingLines.slice(0, 5),
-        });
-      }
+      results.push({
+        context: ctx,
+        item: parsed.base,
+        extension: parsed.ext,
+        title: content.title,
+        tags: content.tags,
+        matches: matchingLines.slice(0, 5),
+      });
     }
   }
 

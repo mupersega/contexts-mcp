@@ -74,15 +74,15 @@ export interface Item {
 
 // --- Zod schemas ---
 
-export const ItemExtensionSchema = z.enum(ITEM_EXTENSIONS);
+const ItemExtensionSchema = z.enum(ITEM_EXTENSIONS);
 
-export const ContextLinkSchema = z.object({
+const ContextLinkSchema = z.object({
   // Relative refs and ticket shortcuts are valid — don't require .url().
   label: z.string().min(1),
   url: z.string().min(1),
 });
 
-export const ContextMetadataSchema = z.object({
+const ContextMetadataSchema = z.object({
   title: z.string().optional(),
   description: z.string().optional(),
   status: z.string().optional(),
@@ -224,7 +224,7 @@ export const SearchContextsArgsSchema = z.object({
 
 export const ContextDiagnoseArgsSchema = z.object({});
 
-export const GUIDE_NAMES = ["migration", "mermaid"] as const;
+const GUIDE_NAMES = ["migration", "mermaid"] as const;
 export const GetGuideArgsSchema = z.object({
   name: z.enum(GUIDE_NAMES),
 });
