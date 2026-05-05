@@ -228,6 +228,7 @@ function normalizeContextMetadata(raw: unknown): ContextMetadata {
   if (typeof r.created === "string") meta.created = r.created;
   if (typeof r.updated === "string") meta.updated = r.updated;
   if (typeof r.last_activity === "string") meta.last_activity = r.last_activity;
+  if (r.pinned === true) meta.pinned = true;
 
   return meta;
 }
@@ -269,6 +270,7 @@ async function writeContextMetadata(
   if (meta.created) ordered.created = meta.created;
   if (meta.updated) ordered.updated = meta.updated;
   if (meta.last_activity) ordered.last_activity = meta.last_activity;
+  if (meta.pinned === true) ordered.pinned = true;
 
   const out = yaml.dump(ordered, { sortKeys: false, lineWidth: 100, noRefs: true });
   await writeFileAtomic(metaPath, out);
@@ -293,6 +295,25 @@ export async function updateContextMetadata(
     last_activity: now,
   };
 
+  await writeContextMetadata(name, merged);
+  return merged;
+}
+
+// Toggle the `pinned` flag on a context's metadata WITHOUT bumping
+// `last_activity`. Pin/unpin is a presentation toggle, not work on the
+// context — a recently-pinned context should not appear "recently active".
+// Mirrors writeContextMetadata's invariants: errors if the context dir is
+// missing; preserves all other fields verbatim.
+export async function setContextPinned(
+  name: string,
+  pinned: boolean
+): Promise<ContextMetadata> {
+  const existing = await getContextMetadata(name);
+  const merged: ContextMetadata = {
+    ...existing,
+    // Only true is persisted; false unsets the field so the YAML stays clean.
+    pinned: pinned ? true : undefined,
+  };
   await writeContextMetadata(name, merged);
   return merged;
 }
@@ -327,14 +348,26 @@ function sortSummaries(
   summaries: ContextSummary[],
   sort: NonNullable<ListContextsOptions["sort"]>
 ): void {
+  // Pinned-first across every sort mode. Within each pin group, apply the same
+  // comparator. We cannot precompute pin partitions because Array.sort gets a
+  // single comparator — instead, the pin difference is the primary key.
+  const pinKey = (s: ContextSummary): number =>
+    s.metadata?.pinned === true ? 1 : 0;
+
   if (sort === "name") {
-    summaries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    summaries.sort((a, b) => {
+      const dp = pinKey(b) - pinKey(a);
+      if (dp !== 0) return dp;
+      return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+    });
     return;
   }
-  // For time-based sorts, most-recent-first. Missing values sink.
+  // Time-based sorts: most-recent-first; missing values sink within group.
   const key: keyof ContextMetadata =
     sort === "recent_activity" ? "last_activity" : sort;
   summaries.sort((a, b) => {
+    const dp = pinKey(b) - pinKey(a);
+    if (dp !== 0) return dp;
     const av = (a.metadata?.[key] as string | undefined) || "";
     const bv = (b.metadata?.[key] as string | undefined) || "";
     if (av === bv) return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
@@ -352,20 +385,15 @@ export async function listContexts(
     typeof opts === "boolean" ? { includeMetadata: opts } : opts;
   const sort = options.sort || "name";
   const includeArchived = options.includeArchived === true;
-  // Any non-name sort, or an archived filter, requires metadata reads.
-  const needMeta =
-    options.includeMetadata === true || sort !== "name" || !includeArchived;
 
   await ensureDataDir();
   const entries = await fs.readdir(dataDir(), { withFileTypes: true });
   const names = entries.filter((e) => e.isDirectory()).map((e) => e.name);
 
+  // Always load metadata: pin state is metadata, and pin-floating applies to
+  // every list_contexts call (with or without include_metadata=true).
   const summaries: ContextSummary[] = [];
   for (const name of names) {
-    if (!needMeta) {
-      summaries.push({ name });
-      continue;
-    }
     let metadata: ContextMetadata;
     try {
       metadata = await getContextMetadata(name);

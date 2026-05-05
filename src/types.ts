@@ -32,6 +32,11 @@ export interface ContextMetadata {
   // ISO timestamp of the last item-level mutation (create/update/append/delete).
   // Bumped by storage automatically; callers never set this directly.
   last_activity?: string;
+  // True when the context is pinned to the top of list_contexts. Omitted (rather
+  // than written as `false`) when not pinned, so old _context.yaml files stay
+  // clean. Set via storage.setContextPinned, NOT via updateContextMetadata —
+  // pinning intentionally skips the last_activity bump.
+  pinned?: boolean;
 }
 
 export interface ContextSummary {
@@ -147,6 +152,10 @@ export const UpdateContextMetadataArgsSchema = z.object({
     .array(ContextLinkSchema)
     .optional()
     .describe("Array of {label, url} — e.g. Jira ticket, PR, design doc."),
+  pinned: z
+    .boolean()
+    .optional()
+    .describe("Pin to the top of list_contexts. true to pin, false to unpin. Pin/unpin does NOT bump last_activity."),
 });
 
 export const ListItemsArgsSchema = z.object({

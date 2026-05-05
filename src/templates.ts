@@ -20,6 +20,12 @@ function contextTagChips(t: string[]): string {
     .join(" ");
 }
 
+// Shared pin SVG — used both for the per-card pin/unpin button and the small
+// "this is pinned" glyph rendered next to the title. Inline so it inherits
+// `currentColor` and stays consistent with the existing terminal-aesthetic
+// SVGs in the header.
+const PIN_SVG = `<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M9.5 1 L11 2.5 L8 5.5 L11.5 9 L8.5 9.5 L7 12 L5 10 L2.5 12.5 L2 12 L4.5 9.5 L2.5 7.5 L3 6.5 L6.5 7 L9.5 1 Z" fill="currentColor"/></svg>`;
+
 function statusBadge(status?: string): string {
   if (!status) return "";
   return `<span class="status-badge">${esc(status)}</span>`;
@@ -363,11 +369,12 @@ export function layout(title: string, body: string): string {
 </html>`;
 }
 
-function renderContextCardBody(summary: ContextSummary): string {
+function renderContextCardBody(summary: ContextSummary, queryString: string = ""): string {
   const meta = summary.metadata;
   const title = displayContextTitle(summary);
   const slug = summary.name;
   const showSlug = title !== slug;
+  const isPinned = meta?.pinned === true;
   const description = meta?.description
     ? `<div class="ctx-desc" style="margin-top:0.35rem; font-size:0.8rem; color:var(--text-muted); font-style:italic;">${esc(meta.description)}</div>`
     : "";
@@ -379,20 +386,38 @@ function renderContextCardBody(summary: ContextSummary): string {
       : "";
   const links = meta?.links ? linksRow(meta.links) : "";
 
+  const titleGlyph = isPinned
+    ? `<span class="pin-glyph" aria-label="pinned" title="pinned">${PIN_SVG}</span>`
+    : "";
+  // The pin button posts to /pin or /unpin and replaces the whole list region
+  // (so the card moves position and the divider re-renders). Carrying the
+  // current sort/filter via the query string keeps the user's view stable.
+  const pinUrl = `/ctx/${esc(slug)}/${isPinned ? "unpin" : "pin"}${queryString}`;
+  const pinLabel = isPinned ? "Unpin" : "Pin";
+  const pinBtn = `<button class="btn btn-sm pin-btn${isPinned ? " is-pinned" : ""}"
+        hx-post="${pinUrl}"
+        hx-target="#context-list-region"
+        hx-swap="outerHTML"
+        title="${pinLabel}"
+        aria-label="${pinLabel}">${PIN_SVG}</button>`;
+
   return `
     <div style="display:flex; justify-content:space-between; align-items:flex-start;">
       <div style="flex:1; min-width:0;">
-        <h3><a href="/ctx/${esc(slug)}">${esc(title)}</a></h3>
+        <h3>${titleGlyph}<a href="/ctx/${esc(slug)}">${esc(title)}</a></h3>
         ${showSlug ? `<div class="meta">${esc(slug)}</div>` : ""}
         ${description}
         ${statusRow}
         ${links}
       </div>
-      <button class="btn btn-danger btn-sm"
-        hx-delete="/ctx/${esc(slug)}"
-        hx-target="#ctx-${esc(slug)}"
-        hx-swap="outerHTML"
-        hx-confirm="Delete context '${esc(slug)}' and all its items?">Delete</button>
+      <div class="card-actions">
+        ${pinBtn}
+        <button class="btn btn-danger btn-sm"
+          hx-delete="/ctx/${esc(slug)}"
+          hx-target="#ctx-${esc(slug)}"
+          hx-swap="outerHTML"
+          hx-confirm="Delete context '${esc(slug)}' and all its items?">Delete</button>
+      </div>
     </div>`;
 }
 
@@ -437,14 +462,32 @@ export function contextListRegionFragment(
   const emptyMessage = controls.statusFilter
     ? `No contexts with status "${esc(controls.statusFilter)}".`
     : `No contexts yet. Create one below.`;
-  const list = contexts.length
-    ? contexts
-        .map(
-          (c) => `
-      <div class="card" id="ctx-${esc(c.name)}">${renderContextCardBody(c)}</div>`
-        )
-        .join("")
-    : `<div class="empty">${emptyMessage}</div>`;
+
+  // Carry the current sort/status/show_archived on every pin/unpin POST so
+  // the response renders the same view the user is currently looking at.
+  // The pinned-vs-unpinned partition is for rendering only — `contexts` is
+  // already pinned-first courtesy of storage.sortSummaries.
+  const queryParts: string[] = [`sort=${esc(controls.sort)}`];
+  if (controls.statusFilter) queryParts.push(`status=${encodeURIComponent(controls.statusFilter)}`);
+  if (controls.showArchived) queryParts.push(`show_archived=1`);
+  const cardQuery = `?${queryParts.join("&")}`;
+
+  const pinned = contexts.filter((c) => c.metadata?.pinned === true);
+  const unpinned = contexts.filter((c) => c.metadata?.pinned !== true);
+
+  const renderCard = (c: ContextSummary) =>
+    `<div class="card${c.metadata?.pinned ? " card-pinned" : ""}" id="ctx-${esc(c.name)}">${renderContextCardBody(c, cardQuery)}</div>`;
+
+  // Divider only when both groups are non-empty. If everything is pinned, or
+  // nothing is, there's no separation to draw.
+  let list: string;
+  if (contexts.length === 0) {
+    list = `<div class="empty">${emptyMessage}</div>`;
+  } else if (pinned.length > 0 && unpinned.length > 0) {
+    list = `${pinned.map(renderCard).join("")}<hr class="pin-divider" aria-label="end of pinned contexts">${unpinned.map(renderCard).join("")}`;
+  } else {
+    list = contexts.map(renderCard).join("");
+  }
 
   const sortOptions: Array<{ v: ContextListControls["sort"]; label: string }> = [
     { v: "name", label: "name" },
@@ -529,8 +572,10 @@ export function contextListRegionFragment(
 }
 
 export function contextCardFragment(summary: ContextSummary): string {
+  // New-card append after POST /ctx never has a known sort/filter, so the pin
+  // button posts without query params; the server rebuilds state from defaults.
   return `
-    <div class="card" id="ctx-${esc(summary.name)}">${renderContextCardBody(summary)}</div>`;
+    <div class="card${summary.metadata?.pinned ? " card-pinned" : ""}" id="ctx-${esc(summary.name)}">${renderContextCardBody(summary, "")}</div>`;
 }
 
 export function contextMetaHeader(name: string, meta: ContextMetadata): string {
