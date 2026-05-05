@@ -786,6 +786,22 @@ export const styles = `
       font-family: 'IBM Plex Mono', monospace;
     }
 
+    /* --- Pinning --- */
+    .card-actions { display: flex; gap: 0.4rem; align-items: flex-start; flex-shrink: 0; }
+    .pin-btn { padding: 0.3rem 0.45rem; line-height: 1; color: var(--text-muted); }
+    .pin-btn svg { width: 14px; height: 14px; vertical-align: middle; }
+    .pin-btn:hover { color: var(--accent); }
+    .pin-btn.is-pinned { color: var(--accent); }
+    .pin-glyph { display: inline-block; margin-right: 0.4rem; color: var(--accent); vertical-align: middle; }
+    .pin-glyph svg { width: 12px; height: 12px; vertical-align: middle; }
+    .pin-divider {
+      border: none;
+      border-top: 1px dashed var(--border-heavy);
+      margin: 1rem 0;
+      opacity: 0.6;
+    }
+    .card-pinned { border-left: 2px solid var(--accent-line-hover); }
+
     /* --- Animations --- */
     @keyframes blink-cursor { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
     @keyframes blink-text { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0.3; } }

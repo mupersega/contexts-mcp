@@ -251,12 +251,31 @@ server.registerTool(
 server.registerTool(
   "update_context_metadata",
   {
-    description: "Patch a context's metadata. Only fields you pass are changed. Set status='archived' to archive.",
+    description: "Patch a context's metadata. Only fields you pass are changed. Set status='archived' to archive. Set pinned=true to pin to the top, pinned=false to unpin.",
     inputSchema: UpdateContextMetadataArgsSchema.shape,
   },
   async (args) => {
-    const { name, ...patch } = args;
-    const metadata = await storage.updateContextMetadata(name, patch);
+    const { name, pinned, ...patch } = args;
+
+    // Pin first (separate path — does NOT bump last_activity). Both writes hit
+    // the same _context.yaml; the second sees the freshly-pinned state.
+    if (pinned !== undefined) {
+      await storage.setContextPinned(name, pinned);
+    }
+
+    // Only call updateContextMetadata if something other than pinned was
+    // patched — otherwise we'd bump last_activity for a no-op.
+    const hasOtherFields =
+      patch.title !== undefined ||
+      patch.description !== undefined ||
+      patch.status !== undefined ||
+      patch.tags !== undefined ||
+      patch.links !== undefined;
+
+    let metadata = await storage.getContextMetadata(name);
+    if (hasOtherFields) {
+      metadata = await storage.updateContextMetadata(name, patch);
+    }
     return json({ name, metadata });
   }
 );

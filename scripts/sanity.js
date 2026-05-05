@@ -130,6 +130,118 @@ async function run() {
     assertEq(raw.contentType, "application/sql; charset=utf-8", "mime");
   });
 
+  await check("pinned=true round-trips through _context.yaml", async () => {
+    await storage.createContext("pin-rt");
+    await storage.updateContextMetadata("pin-rt", { title: "T" });
+    // Hand-craft the metadata write since setContextPinned doesn't exist yet — verify
+    // the read+write path preserves an explicit pinned: true in the YAML.
+    const metaPath = path.join(tmpRoot, "pin-rt", "_context.yaml");
+    const existing = yaml.load(fs.readFileSync(metaPath, "utf-8")) || {};
+    existing.pinned = true;
+    fs.writeFileSync(metaPath, yaml.dump(existing));
+    const meta = await storage.getContextMetadata("pin-rt");
+    if (meta.pinned !== true) throw new Error(`expected pinned=true, got ${JSON.stringify(meta.pinned)}`);
+  });
+
+  await check("pinned=false is omitted from _context.yaml on write", async () => {
+    await storage.createContext("pin-omit");
+    await storage.updateContextMetadata("pin-omit", { title: "T" });
+    const metaPath = path.join(tmpRoot, "pin-omit", "_context.yaml");
+    const raw = fs.readFileSync(metaPath, "utf-8");
+    if (raw.includes("pinned:")) throw new Error("pinned key should not appear when false");
+  });
+
+  await check("setContextPinned does NOT bump last_activity", async () => {
+    await storage.createContext("pin-no-bump");
+    await storage.createItem("pin-no-bump", "seed", "md", { content: "x" });
+    const before = (await storage.getContextMetadata("pin-no-bump")).last_activity;
+    if (!before) throw new Error("seed item should have set last_activity");
+    await new Promise((r) => setTimeout(r, 25));
+    await storage.setContextPinned("pin-no-bump", true);
+    const after = (await storage.getContextMetadata("pin-no-bump")).last_activity;
+    if (after !== before) {
+      throw new Error(`last_activity changed from ${before} to ${after} — pin should not bump it`);
+    }
+    const meta = await storage.getContextMetadata("pin-no-bump");
+    if (meta.pinned !== true) throw new Error("pinned should be true after setContextPinned(true)");
+  });
+
+  await check("setContextPinned(false) clears the field", async () => {
+    await storage.createContext("pin-clear");
+    await storage.setContextPinned("pin-clear", true);
+    await storage.setContextPinned("pin-clear", false);
+    const meta = await storage.getContextMetadata("pin-clear");
+    if (meta.pinned === true) throw new Error("pinned should be unset after setContextPinned(false)");
+    const raw = fs.readFileSync(path.join(tmpRoot, "pin-clear", "_context.yaml"), "utf-8");
+    if (raw.includes("pinned:")) throw new Error("pinned key should not appear in YAML after unpin");
+  });
+
+  await check("setContextPinned errors when the context does not exist", async () => {
+    let threw = false;
+    try {
+      await storage.setContextPinned("does-not-exist", true);
+    } catch {
+      threw = true;
+    }
+    if (!threw) throw new Error("expected setContextPinned to throw for missing context");
+  });
+
+  await check("pinned context floats to top of sort=name", async () => {
+    await storage.createContext("zzz-pinned");
+    await storage.createContext("aaa-unpinned");
+    await storage.createContext("bbb-unpinned");
+    await storage.setContextPinned("zzz-pinned", true);
+    const list = await storage.listContexts({ includeMetadata: true, sort: "name" });
+    const names = list.map((c) => c.name);
+    const idxPin = names.indexOf("zzz-pinned");
+    const idxAaa = names.indexOf("aaa-unpinned");
+    const idxBbb = names.indexOf("bbb-unpinned");
+    if (idxPin === -1 || idxAaa === -1 || idxBbb === -1) throw new Error("contexts missing");
+    if (idxPin > idxAaa || idxPin > idxBbb) {
+      throw new Error(`pinned should be first; got [${names.join(", ")}]`);
+    }
+    if (idxAaa > idxBbb) throw new Error("unpinned group must remain alphabetical");
+  });
+
+  await check("pinned context floats to top of sort=recent_activity", async () => {
+    await storage.createContext("recent-pinned");
+    await storage.createContext("recent-active");
+    await storage.createItem("recent-pinned", "old", "md", { content: "x" });
+    await new Promise((r) => setTimeout(r, 25));
+    await storage.createItem("recent-active", "new", "md", { content: "y" });
+    await storage.setContextPinned("recent-pinned", true);
+    const list = await storage.listContexts({
+      includeMetadata: true,
+      sort: "recent_activity",
+    });
+    const idxPin = list.findIndex((c) => c.name === "recent-pinned");
+    const idxAct = list.findIndex((c) => c.name === "recent-active");
+    if (idxPin === -1 || idxAct === -1) throw new Error("contexts missing");
+    if (idxPin > idxAct) {
+      throw new Error(`pinned should beat recent_activity; got pin=${idxPin}, active=${idxAct}`);
+    }
+  });
+
+  await check("archived+pinned hidden by default; floats when include_archived=true", async () => {
+    await storage.createContext("arch-pin");
+    await storage.createContext("plain");
+    await storage.setContextPinned("arch-pin", true);
+    await storage.updateContextMetadata("arch-pin", { status: "archived" });
+
+    const def = await storage.listContexts({ includeMetadata: true });
+    if (def.find((c) => c.name === "arch-pin")) {
+      throw new Error("archived+pinned context should be hidden by default");
+    }
+
+    const all = await storage.listContexts({ includeMetadata: true, includeArchived: true });
+    const idxPin = all.findIndex((c) => c.name === "arch-pin");
+    const idxPlain = all.findIndex((c) => c.name === "plain");
+    if (idxPin === -1 || idxPlain === -1) throw new Error("contexts missing in include_archived list");
+    if (idxPin > idxPlain) {
+      throw new Error(`archived+pinned should still float when shown; got pin=${idxPin}, plain=${idxPlain}`);
+    }
+  });
+
   console.log("");
   if (failed > 0) {
     console.error(`${failed} check(s) failed`);

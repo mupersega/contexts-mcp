@@ -91,17 +91,14 @@ function parseTags(raw: unknown): string[] {
     .filter(Boolean);
 }
 
-// --- Context routes ---
+// Read the catalog with metadata + archived included, compute the visible
+// subset based on sort/status/showArchived, and return everything the
+// list-region template needs. Shared by GET / and the pin/unpin POSTs.
+async function buildListRegionState(query: Record<string, unknown>) {
+  const sort = parseSort(query.sort);
+  const showArchived = parseTruthy(query.show_archived);
+  const statusFilter = parseStatus(query.status);
 
-app.get("/", async (req, res) => {
-  const sort = parseSort(req.query.sort);
-  const showArchived = parseTruthy(req.query.show_archived);
-  const statusFilter = parseStatus(req.query.status);
-
-  // One pass with metadata and archived included — gives us the raw
-  // catalog to compute the status vocabulary, the archived count, and
-  // the filtered view from. Avoids the old two-pass split between the
-  // rendered list and the archived count.
   const all = await storage.listContexts({
     includeMetadata: true,
     includeArchived: true,
@@ -127,6 +124,13 @@ app.get("/", async (req, res) => {
   }
 
   const controls = { sort, showArchived, archivedCount, distinctStatuses, statusFilter };
+  return { visible, controls };
+}
+
+// --- Context routes ---
+
+app.get("/", async (req, res) => {
+  const { visible, controls } = await buildListRegionState(req.query);
   if (req.get("HX-Request") === "true") {
     res.send(contextListRegionFragment(visible, controls));
     return;
@@ -138,7 +142,7 @@ app.post("/ctx", async (req, res) => {
   try {
     const name = req.body.name?.trim();
     if (!name || !CONTEXT_NAME_REGEX.test(name)) {
-      res.status(400).send(`<div class="flash flash-error">Invalid name. Use letters, numbers, hyphens, underscores.</div>`);
+      res.status(400).send(`<div class="flash flash-error">Invalid name — no spaces or punctuation. Use letters, numbers, hyphens, and underscores only (e.g. <code>my-context-name</code>).</div>`);
       return;
     }
     await storage.createContext(name);
@@ -153,6 +157,33 @@ app.delete("/ctx/:name", async (req, res) => {
   try {
     await storage.deleteContext(req.params.name);
     res.send("");
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(400).send(`<div class="flash flash-error">${escHtml(msg)}</div>`);
+  }
+});
+
+// Pin/unpin endpoints — both return the full #context-list-region fragment so
+// the card moves to its new position immediately and the divider re-renders.
+// Sort/status/show_archived are read from query params on the POST URL; the
+// pin button's hx-post URL must include them so the response renders the same
+// view the user is currently looking at.
+app.post("/ctx/:name/pin", async (req, res) => {
+  try {
+    await storage.setContextPinned(req.params.name, true);
+    const { visible, controls } = await buildListRegionState(req.query);
+    res.send(contextListRegionFragment(visible, controls));
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(400).send(`<div class="flash flash-error">${escHtml(msg)}</div>`);
+  }
+});
+
+app.post("/ctx/:name/unpin", async (req, res) => {
+  try {
+    await storage.setContextPinned(req.params.name, false);
+    const { visible, controls } = await buildListRegionState(req.query);
+    res.send(contextListRegionFragment(visible, controls));
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     res.status(400).send(`<div class="flash flash-error">${escHtml(msg)}</div>`);

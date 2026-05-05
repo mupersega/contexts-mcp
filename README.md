@@ -144,6 +144,7 @@ powershell -ExecutionPolicy Bypass -File scripts\uninstall.ps1
 - **Non-markdown items** have only filesystem metadata. Want rich metadata on a JSON/CSV/SQL payload? Drop a companion `.md` in the same context.
 - **Context metadata** lives in an optional `_context.yaml` at the context root: `title`, `description`, `status`, `tags`, `links: [{label, url}]`, `created`, `updated`, `last_activity`. Never exposed as an item. `last_activity` is managed automatically — don't set it manually.
 - **Archival convention**: `status: 'archived'` makes a context invisible to default `list_contexts` / `search_contexts`. Pass `include_archived: true` (or toggle it in the UI) to see them.
+- **Pinning**: `pinned: true` on a context (set via `update_context_metadata` or the pin button in the web UI) floats it to the top of `list_contexts` regardless of sort. Pin/unpin does not bump `last_activity` — it's a presentation toggle, not work on the context. Archived contexts stay hidden by default even when pinned.
 - **Data-dir version stamp**: `.contexts-mcp-version` at the data-dir root tracks the schema version. Future server versions can use this for migrations.
 
 ## MCP tools
@@ -154,7 +155,7 @@ All tools the server exposes:
 - `create_context` — create a new named context folder.
 - `delete_context` — delete a context and everything inside it (destructive).
 - `get_context` — read a context's metadata.
-- `update_context_metadata` — patch a context's metadata (only passed fields change). Set `status: 'archived'` to archive.
+- `update_context_metadata` — patch a context's metadata (only passed fields change). Set `status: 'archived'` to archive. Set `pinned: true`/`false` to pin or unpin.
 - `list_items` — list items in a context.
 - `get_item` — read an item's parsed content (markdown returns frontmatter + body; others return raw text).
 - `get_item_raw` — byte-for-byte content of an item on disk, including markdown frontmatter. Returns `{content, filename, contentType, extension, size}`.

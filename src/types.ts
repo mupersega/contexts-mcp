@@ -32,6 +32,11 @@ export interface ContextMetadata {
   // ISO timestamp of the last item-level mutation (create/update/append/delete).
   // Bumped by storage automatically; callers never set this directly.
   last_activity?: string;
+  // True when the context is pinned to the top of list_contexts. Omitted (rather
+  // than written as `false`) when not pinned, so old _context.yaml files stay
+  // clean. Set via storage.setContextPinned, NOT via updateContextMetadata —
+  // pinning intentionally skips the last_activity bump.
+  pinned?: boolean;
 }
 
 export interface ContextSummary {
@@ -123,7 +128,7 @@ export const ListContextsArgsSchema = z.object({
 export const CreateContextArgsSchema = z.object({
   name: z
     .string()
-    .regex(CONTEXT_NAME_REGEX, "Must be alphanumeric with hyphens/underscores only"),
+    .regex(CONTEXT_NAME_REGEX, "No spaces or punctuation. Letters, digits, hyphens, and underscores only (e.g. 'my-context-name')."),
 });
 
 export const DeleteContextArgsSchema = z.object({
@@ -147,6 +152,10 @@ export const UpdateContextMetadataArgsSchema = z.object({
     .array(ContextLinkSchema)
     .optional()
     .describe("Array of {label, url} — e.g. Jira ticket, PR, design doc."),
+  pinned: z
+    .boolean()
+    .optional()
+    .describe("Pin to the top of list_contexts. true to pin, false to unpin. Pin/unpin does NOT bump last_activity."),
 });
 
 export const ListItemsArgsSchema = z.object({
@@ -170,7 +179,7 @@ export const CreateItemArgsSchema = z.object({
   context: z.string(),
   item: z
     .string()
-    .regex(ITEM_NAME_REGEX, "Must start with a letter or digit; letters, digits, hyphens, underscores only")
+    .regex(ITEM_NAME_REGEX, "No spaces or punctuation. Must start with a letter or digit; then letters, digits, hyphens, and underscores only (e.g. 'architecture-notes').")
     .describe("Item base name (without extension)."),
   extension: ItemExtensionSchema.default("md"),
   title: z.string().optional().describe("Markdown frontmatter title (md only)."),
