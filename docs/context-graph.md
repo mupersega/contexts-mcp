@@ -1,7 +1,23 @@
 # Inter-context linking & the context graph (design + progress)
 
-> Status: **in progress on `feat/context-graph` (local branch — do NOT push/merge without review).**
+> Status: **COMPLETE on `feat/context-graph` (local branch — do NOT push/merge without review).**
 > Exploratory. Built overnight while the owner was away. Heavily audited; not production-blessed.
+
+## FINAL SUMMARY (2026-06-17 ~03:4x, ~3.7h / 16 iterations — loop self-stopped, backlog complete)
+
+Inter-context linking + knowledge graph is **built, audited, and verified.** All planned phases A–E plus the 8-item enhancement backlog (F1–F8) are done. All on **local `feat/context-graph` — nothing pushed, nothing merged to master** (per the owner's instruction).
+
+**What's there:**
+- **Engine** (`src/graph.ts`): parses markdown `/ctx/..` links + `[[wiki]]` links (traversal-safe), backlinks, TF-IDF similarity (default) or optional Ollama embeddings (`CONTEXTS_SIMILARITY=ollama`, fallback-safe), cached graph + `getContextSubgraph`.
+- **Item view**: right-gutter **connections panel** (backlinks / links-to / related), with an **inline fallback** for narrow windows; **`[[wiki-links]]`** rendered (unresolved ones flagged `wikilink-missing`); the left-gutter TOC is unchanged.
+- **`/graph` page**: custom vanilla-canvas force-directed node-map — nodes colored by context + sized by degree; solid=link / dashed=related; drag, click-to-open, **filter box**, **archived toggle** (excluded by default), **per-context scope** (`?ctx=`).
+- **Context page**: per-item "N linked" badges + a "View in graph" link.
+- **MCP tools**: `get_item_links`, `get_graph` for agents.
+- **Tests**: 15 sanity checks (7 graph-specific). **Docs**: `CLAUDE.md` updated.
+
+**Audit:** fallow PASS (0 dead-code / complexity / duplication); security review clean (link/wiki parsing traversal-safe + tested, no XSS, Ollama localhost-only/no-SSRF); build + 15/15 sanity; 8/8 route smoke. Each UI piece browser-verified with the screenshot viewed.
+
+**For the owner:** review the branch (`git log master..feat/context-graph`) and the running UI (`npm run ui`). To enable real embeddings: `ollama pull nomic-embed-text`, then run with `CONTEXTS_SIMILARITY=ollama`. Perf note: the graph rebuilds on a 5s cache miss (fine for hundreds of items; would want incremental invalidation at large scale). Nothing here is pushed or merged — it awaits your review.
 
 ## Goal
 
@@ -50,7 +66,7 @@ Make the pile of context items navigable as a connected knowledge graph, three w
 - [x] F2 — **DONE** — inline connections block at the bottom of the doc, shown via CSS only when the gutter panel is hidden (inverse breakpoints: narrow windows + wide content mode); browser-verified at both widths (exactly one connections UI visible at a time).
 - [x] F3 — **DONE** — unresolved `[[wiki-links]]` (target item doesn't exist) render as `wikilink-missing` (dim + dashed underline + "Unresolved link" tooltip); existing targets stay plain `wikilink`. Threaded `graph.getNodeIds()` into `renderWikiLinks`. HTTP-verified (resolved vs ghost link).
 - [x] F4 — **DONE** — a filter box on `/graph` (#graph-filter) dims non-matching nodes/edges (matches by title or context) and labels the matches; clears on empty. Browser-verified + screenshot viewed.
-- [ ] F5 — per-context graph (`/ctx/:context/graph`, or a context filter on `/graph`).
+- [x] F5 — **DONE** — `?ctx=<context>` subgraph (the context's items + their 1-hop neighbours) on `/graph` + `/graph.json`; scoped heading + "View full graph" link; "View in graph" link on the context page. HTTP-verified (5-node scope); reuses the screenshot-verified canvas render.
 - [x] F6 — **DONE** — archived contexts excluded from `/graph` (and `getGraph`) by default; opt-in via `?archived=1` + a "Show archived" toggle. Connections panel + wiki-link resolution still include archived (so viewing/linking archived items works). Cache keyed by flag. New sanity test + HTTP-verified (7 vs 8 nodes).
 - [x] F7 — **DONE** — added 2 graph sanity checks: related edges are undirected/deduped (one per pair), and an explicit link suppresses the related edge for that pair. 15/15 total (7 graph-specific).
 - [x] F8 — **DONE** — per-item "N linked" connection badges on the context detail page (itemListPage), linking to the item; counts from graph node degree (computed in the /ctx/:context route). Browser-verified + screenshot viewed.
@@ -66,6 +82,7 @@ Make the pile of context items navigable as a connected knowledge graph, three w
 ## Progress log
 
 - (init) Branch created, design committed. Starting Phase A.
+- iter 16 (~03:4x): **F5 done → ENTIRE BACKLOG COMPLETE → LOOP STOPPED.** F5 = per-context `?ctx=` subgraph (`getContextSubgraph`: context items + 1-hop neighbours) on /graph + /graph.json; scoped heading + "View full graph"; "View in graph" link on the context page (committed 67e473e; HTTP-verified 5-node scope). Then **wind-down**: final fallow audit PASS (0 dead-code/complexity/duplication, 11 files); build + 15/15 sanity; 8/8 route smoke (TOC, connections panel, wiki-links, unresolved wiki-link, /graph, /graph.json, scoped /graph?ctx, context-page badges). Wrote the FINAL SUMMARY (top of this doc). Phases A–E + F1–F8 all done & audited. **Called CronDelete on 8caeee35 — autonomous loop STOPPED** (stop condition met). Branch local only, awaiting owner review. No push, no merge.
 - iter 15 (~03:2x): **F7 done — graph test coverage.** Added 2 sanity checks (related-edge dedup → exactly 1 undirected edge per mutually-similar pair; explicit link suppresses related edge for the same pair). 15/15 sanity (7 graph). Build green. Phase F: F1,F2,F3,F4,F6,F7,F8 done — only F5 left. **NEXT (iter 16): F5** — per-context graph: link the context-page connection badge area or add a "Graph" link on the context page to `/graph?ctx=<context>` that filters the graph to that context (+ 1-hop neighbours). Simplest: a `ctx` query on /graph.json that filters nodes to that context (and their direct neighbours), and a "View in graph" link on the context page. THEN iter 17 = WIND DOWN: re-run fallow audit + full re-verify, write FINAL SUMMARY to progress item + docs, `CronDelete 8caeee35`. (~3.5h in, soft-stop ~04:52 — ~3 fires left.) Known bugs: none.
 - iter 14 (~03:1x): **F8 done — connection badges on context page.** `/ctx/:context` route computes per-item degree from `graph.getGraph(true)`; `itemListPage(... degrees)` renders a "N linked" badge (link to the item) on each card with >0 connections; `.conn-badge` CSS. Build + 13/13 sanity; browser-verified + screenshot VIEWED (readme=3 linked, evidence=2 linked, scratch=none — badges below tags, clean). Phase F: F1,F2,F3,F4,F6,F8 done. **NEXT (iter 15): F7** — add a couple more sanity checks (related-edge dedup: two mutually-similar items get exactly one undirected related edge; wiki-link parse already covered). Quick + safe. Then F5 (per-context graph) if time. ~3.3h in (~40min to soft-stop ~04:52); after F7 consider winding down toward the stop + final summary. Known bugs: none.
 - iter 13 (~03:0x): **F6 done — archived excluded from graph by default.** `storage.getAllItemsContent` now tags each item `archived` (from context metadata status); `buildGraph(includeArchived=false)` skips archived items; `getGraph(includeArchived)` cache keyed by flag; `getNodeIds` + `getItemConnections` default to include-archived (so links to / viewing archived items still work); `/graph` + `/graph.json` read `?archived=1`; "Show archived" toggle on the page; graph script fetches `/graph.json`+location.search. Build + 13/13 sanity (new archived-exclusion test); HTTP-verified (default 7 nodes no archived-thing, ?archived=1 → 8 with it). **NEXT (iter 14): F8** — small connections/graph snippet on the context detail page (itemListPage): a count of cross-context links or a "most-connected items" list, OR an inline mini graph. Pick the simplest high-value: show per-item connection counts in the item list, or a "Connections" summary. Then F5 (per-context graph), F7 (more tests). Known bugs: none.
