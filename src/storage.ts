@@ -4,6 +4,11 @@ import matter from "gray-matter";
 import yaml from "js-yaml";
 import { loadConfig, packageVersion } from "./config.js";
 import {
+  ATTACHMENT_EXTENSIONS,
+  ATTACHMENT_NAME_REGEX,
+  ATTACHMENTS_DIRNAME,
+  AttachmentExtension,
+  AttachmentInfo,
   CONTEXT_META_FILENAME,
   CONTEXT_NAME_REGEX,
   ContextLink,
@@ -417,6 +422,137 @@ export async function deleteContext(name: string): Promise<void> {
     throw new Error(`Context '${name}' not found`);
   });
   await fs.rm(dir, { recursive: true, force: true });
+}
+
+// --- Attachments ---
+// Binary evidence (images/video/audio/pdf) stored in a context's assets/
+// subfolder. Never exposed as an item — listItems skips it (not a whitelisted
+// item file) — and served as static files via the web UI.
+
+function attachmentExtOf(filename: string): AttachmentExtension | null {
+  const dot = filename.lastIndexOf(".");
+  if (dot <= 0) return null;
+  const ext = filename.slice(dot + 1).toLowerCase();
+  return (ATTACHMENT_EXTENSIONS as readonly string[]).includes(ext)
+    ? (ext as AttachmentExtension)
+    : null;
+}
+
+function resolveAttachmentsDir(context: string): string {
+  const contextDir = resolveContextPath(context);
+  const resolved = path.resolve(contextDir, ATTACHMENTS_DIRNAME);
+  assertWithin(contextDir, resolved, "attachments dir");
+  return resolved;
+}
+
+// Resolve + validate a single attachment path. Defense in depth: the filename
+// must pass the name regex and carry a whitelisted extension, and the resolved
+// path must stay inside the context's assets/ dir.
+export function attachmentFilePath(context: string, filename: string): string {
+  if (!ATTACHMENT_NAME_REGEX.test(filename) || !attachmentExtOf(filename)) {
+    throw new Error(`Invalid attachment filename '${filename}'`);
+  }
+  const dir = resolveAttachmentsDir(context);
+  const resolved = path.resolve(dir, filename);
+  assertWithin(dir, resolved, "attachment filename");
+  return resolved;
+}
+
+export async function addAttachment(
+  context: string,
+  sourcePath: string,
+  name?: string
+): Promise<AttachmentInfo> {
+  await fs.access(resolveContextPath(context)).catch(() => {
+    throw new Error(`Context '${context}' not found`);
+  });
+
+  const srcExt = path.extname(sourcePath).slice(1).toLowerCase();
+  if (!(ATTACHMENT_EXTENSIONS as readonly string[]).includes(srcExt)) {
+    throw new Error(
+      `Unsupported attachment type '.${srcExt}'. Allowed: ${ATTACHMENT_EXTENSIONS.join(", ")}`
+    );
+  }
+
+  let bytes: Buffer;
+  try {
+    bytes = await fs.readFile(sourcePath);
+  } catch {
+    throw new Error(`Source file not found or unreadable: ${sourcePath}`);
+  }
+
+  const rawBase =
+    (name && name.trim()) || path.basename(sourcePath, path.extname(sourcePath));
+  const base =
+    rawBase
+      .replace(/[^a-zA-Z0-9._-]/g, "-")
+      .replace(/^[._-]+/, "")
+      .replace(/-+/g, "-") || "attachment";
+
+  const dir = resolveAttachmentsDir(context);
+  await fs.mkdir(dir, { recursive: true });
+
+  // Pick a non-colliding filename: base.ext, base-1.ext, base-2.ext, ...
+  let filename = `${base}.${srcExt}`;
+  for (let n = 1; ; n++) {
+    try {
+      await fs.access(path.join(dir, filename));
+      filename = `${base}-${n}.${srcExt}`;
+    } catch {
+      break;
+    }
+  }
+
+  const dest = attachmentFilePath(context, filename);
+  await fs.writeFile(dest, bytes);
+  await touchContext(context);
+
+  const stat = await fs.stat(dest);
+  return {
+    filename,
+    extension: srcExt as AttachmentExtension,
+    size: stat.size,
+    created: statCreatedISO(stat),
+    updated: stat.mtime.toISOString(),
+  };
+}
+
+export async function listAttachments(context: string): Promise<AttachmentInfo[]> {
+  await fs.access(resolveContextPath(context)).catch(() => {
+    throw new Error(`Context '${context}' not found`);
+  });
+  const dir = resolveAttachmentsDir(context);
+  let entries: string[];
+  try {
+    entries = await fs.readdir(dir);
+  } catch {
+    return [];
+  }
+  const out: AttachmentInfo[] = [];
+  for (const entry of entries) {
+    const ext = attachmentExtOf(entry);
+    if (!ext || !ATTACHMENT_NAME_REGEX.test(entry)) continue;
+    const stat = await fs.stat(path.join(dir, entry));
+    if (!stat.isFile()) continue;
+    out.push({
+      filename: entry,
+      extension: ext,
+      size: stat.size,
+      created: statCreatedISO(stat),
+      updated: stat.mtime.toISOString(),
+    });
+  }
+  out.sort((a, b) => a.filename.localeCompare(b.filename));
+  return out;
+}
+
+export async function deleteAttachment(context: string, filename: string): Promise<void> {
+  const p = attachmentFilePath(context, filename);
+  await fs.access(p).catch(() => {
+    throw new Error(`Attachment '${filename}' not found in context '${context}'`);
+  });
+  await fs.rm(p, { force: true });
+  await touchContext(context);
 }
 
 // --- Item operations ---

@@ -791,4 +791,11 @@ export const styles = `
     @keyframes blink-text { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0.3; } }
     @keyframes stamp-in { 0% { opacity: 0; transform: translateY(-4px); } 100% { opacity: 1; transform: translateY(0); } }
     @keyframes screen-flicker { 0% { opacity: 0.97; } 5% { opacity: 1; } 10% { opacity: 0.98; } 15% { opacity: 1; } 100% { opacity: 1; } }
+
+    /* --- Embedded markdown media (attachments from assets/) --- */
+    .doc-content img { max-width: 100%; height: auto; border-radius: 4px; }
+    .doc-content video.doc-media { display: block; max-width: 100%; margin: 1rem 0; border-radius: 4px; background: #000; }
+    .doc-content audio.doc-media { display: block; width: 100%; margin: 1rem 0; }
+    .doc-content a.doc-attachment { display: inline-block; padding: 0.3rem 0.7rem; margin: 0.25rem 0; border: 1px solid var(--border); border-radius: 4px; color: var(--accent); text-decoration: none; }
+    .doc-content a.doc-attachment:hover { border-color: var(--accent-line-hover); }
   `;

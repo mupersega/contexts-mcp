@@ -14,6 +14,24 @@ export const CONTEXT_NAME_REGEX = /^[a-zA-Z0-9_-]+$/;
 // names like "_context".
 export const ITEM_NAME_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
 
+// --- Attachments ---
+// Binary evidence (images/video/audio/pdf) lives in a context's assets/ subfolder,
+// referenced from markdown via ![alt](assets/<filename>). Deliberately excludes
+// active/executable types (no svg, html, js) — these are served as static files.
+export const ATTACHMENT_EXTENSIONS = [
+  "png", "jpg", "jpeg", "gif", "webp", "avif",
+  "mp4", "webm", "mov", "ogg",
+  "mp3", "wav",
+  "pdf",
+] as const;
+export type AttachmentExtension = (typeof ATTACHMENT_EXTENSIONS)[number];
+
+export const ATTACHMENTS_DIRNAME = "assets";
+
+// Attachment file names (with extension): start alphanumeric, then word chars,
+// dot, hyphen. Validated at the storage boundary and on every serve.
+export const ATTACHMENT_NAME_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
+
 // --- Context metadata ---
 
 export interface ContextLink {
@@ -59,6 +77,14 @@ export interface ItemInfo {
   created: string;     // md: frontmatter; non-md: fs.stat birthtime/ctime
   updated: string;     // md: frontmatter; non-md: fs.stat mtime
   size: number;
+}
+
+export interface AttachmentInfo {
+  filename: string; // includes extension, e.g. screenshot-1.png
+  extension: AttachmentExtension;
+  size: number;
+  created: string;
+  updated: string;
 }
 
 // Full read result.
@@ -227,4 +253,24 @@ export const ContextDiagnoseArgsSchema = z.object({});
 const GUIDE_NAMES = ["migration", "mermaid"] as const;
 export const GetGuideArgsSchema = z.object({
   name: z.enum(GUIDE_NAMES),
+});
+
+export const AddAttachmentArgsSchema = z.object({
+  context: z.string(),
+  source_path: z
+    .string()
+    .describe("Path to a local file to copy in (e.g. a Playwright screenshot or webm)."),
+  name: z
+    .string()
+    .optional()
+    .describe("Optional base name (without extension) for the stored file; defaults to the source file's name."),
+});
+
+export const ListAttachmentsArgsSchema = z.object({
+  context: z.string(),
+});
+
+export const DeleteAttachmentArgsSchema = z.object({
+  context: z.string(),
+  filename: z.string().describe("Attachment filename including extension, e.g. screenshot-1.png."),
 });
