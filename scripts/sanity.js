@@ -199,6 +199,17 @@ async function run() {
     assertEq(beta.backlinks.map((b) => b.id), ["gctxa/alpha"], "beta backlink from alpha");
   });
 
+  await check("graph: ollama similarity backend falls back to tf-idf when unreachable", async () => {
+    process.env.CONTEXTS_SIMILARITY = "ollama";
+    process.env.CONTEXTS_OLLAMA_URL = "http://127.0.0.1:1"; // nothing listening -> forces fallback
+    graph.invalidateGraphCache();
+    const g = await graph.buildGraph(); // must not throw; falls back to TF-IDF
+    if (!g.nodes.length) throw new Error("buildGraph returned no nodes under ollama-fallback");
+    delete process.env.CONTEXTS_SIMILARITY;
+    delete process.env.CONTEXTS_OLLAMA_URL;
+    graph.invalidateGraphCache();
+  });
+
   console.log("");
   if (failed > 0) {
     console.error(`${failed} check(s) failed`);

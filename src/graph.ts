@@ -150,6 +150,98 @@ export function tfidfRelated(
   return result;
 }
 
+// --- Pluggable similarity backend (TF-IDF default; optional Ollama embeddings) ---
+
+// CONTEXTS_SIMILARITY=ollama uses local embeddings for better topical grouping;
+// ANY failure (flag off, Ollama down, bad response, timeout) falls back to the
+// always-available, zero-dependency TF-IDF path. The feature always works.
+async function computeRelated(
+  docs: { id: string; text: string }[],
+  topK = 4
+): Promise<Map<string, { id: string; score: number }[]>> {
+  if (process.env.CONTEXTS_SIMILARITY === "ollama") {
+    try {
+      return await ollamaRelated(docs, topK, 0.55);
+    } catch {
+      // fall through to TF-IDF — resilience over the optional enhancement
+    }
+  }
+  return tfidfRelated(docs, topK, 0.08);
+}
+
+// Operator-configured local endpoint only (default localhost) — never a value
+// an end user can supply, so no SSRF surface.
+function ollamaUrl(): string {
+  return (process.env.CONTEXTS_OLLAMA_URL || "http://localhost:11434").replace(/\/+$/, "");
+}
+
+async function embedOllama(text: string, timeoutMs = 4000): Promise<number[]> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${ollamaUrl()}/api/embeddings`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: process.env.CONTEXTS_OLLAMA_MODEL || "nomic-embed-text",
+        prompt: text.slice(0, 8000),
+      }),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) throw new Error(`ollama embeddings HTTP ${res.status}`);
+    const j = (await res.json()) as { embedding?: number[] };
+    if (!Array.isArray(j.embedding) || j.embedding.length === 0) {
+      throw new Error("ollama: empty embedding");
+    }
+    return j.embedding;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+interface EmbVec {
+  id: string;
+  v: number[];
+  norm: number;
+}
+
+function cosineVec(a: EmbVec, b: EmbVec): number {
+  const n = Math.min(a.v.length, b.v.length);
+  let dot = 0;
+  for (let i = 0; i < n; i++) dot += a.v[i] * b.v[i];
+  return dot / (a.norm * b.norm);
+}
+
+async function ollamaRelated(
+  docs: { id: string; text: string }[],
+  topK: number,
+  threshold: number
+): Promise<Map<string, { id: string; score: number }[]>> {
+  const vecs: EmbVec[] = [];
+  const CONCURRENCY = 4;
+  for (let i = 0; i < docs.length; i += CONCURRENCY) {
+    const batch = docs.slice(i, i + CONCURRENCY);
+    const embs = await Promise.all(batch.map((d) => embedOllama(d.text)));
+    embs.forEach((v, k) => {
+      let s = 0;
+      for (const x of v) s += x * x;
+      vecs.push({ id: batch[k].id, v, norm: Math.sqrt(s) || 1 });
+    });
+  }
+  const result = new Map<string, { id: string; score: number }[]>();
+  for (let i = 0; i < vecs.length; i++) {
+    const sims: { id: string; score: number }[] = [];
+    for (let j = 0; j < vecs.length; j++) {
+      if (i === j) continue;
+      const score = cosineVec(vecs[i], vecs[j]);
+      if (score >= threshold) sims.push({ id: vecs[j].id, score });
+    }
+    sims.sort((a, b) => b.score - a.score);
+    result.set(vecs[i].id, sims.slice(0, topK));
+  }
+  return result;
+}
+
 // --- Graph build (reads the corpus via storage) ---
 
 interface NodeContent {
@@ -199,10 +291,9 @@ export async function buildGraph(): Promise<Graph> {
   for (const e of edges) {
     explicit.add(undirectedKey(e.source, e.target));
   }
-  const related = tfidfRelated(
+  const related = await computeRelated(
     [...nodeMap.entries()].map(([id, n]) => ({ id, text: `${n.title} ${n.title} ${n.content}` })),
-    4,
-    0.08
+    4
   );
   const relSeen = new Set<string>();
   for (const [id, sims] of related) {
