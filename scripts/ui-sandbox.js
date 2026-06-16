@@ -58,16 +58,22 @@ function seed(dataDir) {
       "",
     ].join("\n"),
   );
+  // Long, multi-word headings + filler body so the TOC rail is genuinely
+  // exercised (wrapping long entries) and the page is tall enough to scroll
+  // (testing sticky behaviour past the sticky header chrome).
+  const para =
+    "Filler body text to make the document tall enough that the sticky table-of-contents rail has something to scroll past, and long enough that headings exercise the wrapping in the rail.";
   write(
     "alpha-notes/readme.md",
     [
       "---", "title: Read Me First", "tags: [intro, guide]", "---", "",
-      "# Alpha Notes", "", "Intro paragraph with a [link](https://example.com).", "",
-      "## Getting Started", "", "Some **markdown** body text.", "",
-      "### Installation", "", "Install steps go here.", "",
-      "### Configuration", "", "Config details go here.", "",
-      "## Usage", "", "How to use it.", "",
-      "## Troubleshooting", "", "Problems and fixes.", "",
+      "# The Problem With Long-Lived Project Context", "", para, "", para, "",
+      "## A Filing Cabinet For Your Agent's Working Memory", "", para, "", para, "",
+      "### Optional Metadata And Why It Matters Here", "", para, "", para, "",
+      "### Configuration Knobs You Will Probably Never Touch", "", para, "", para, "",
+      "## The Tools And How They Compose Together", "", para, "", para, "",
+      "## Setup, Configuration, And A First Run", "", para, "", para, "",
+      "## Composability With Other MCP Servers", "", para, "", para, "",
     ].join("\n"),
   );
   write("alpha-notes/scratch.txt", "plain text item, no frontmatter, nothing fancy\n");

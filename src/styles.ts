@@ -794,17 +794,26 @@ export const styles = `
 
     /* --- Markdown table of contents (left rail on rendered .md item views) --- */
     .doc-layout { display: block; }
-    .doc-layout.has-toc { display: grid; grid-template-columns: 13rem minmax(0, 1fr); gap: 2rem; align-items: start; }
-    .doc-toc { position: sticky; top: 1rem; align-self: start; max-height: calc(100vh - 3rem); overflow-y: auto; font-size: 0.82rem; }
-    .doc-toc-title { text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.68rem; color: var(--text-dim); margin-bottom: 0.6rem; }
+    /* The table of contents lives in the left WINDOW gutter — fixed, OUTSIDE the
+       centered content column — so it never eats content width and is never
+       clipped by the in-container sticky chrome (header/breadcrumb/title bar).
+       Hidden when the gutter is too small (narrow window or wide content mode). */
+    .doc-toc {
+      position: fixed; top: 6rem; left: 1.5rem; width: 13rem; z-index: 5;
+      max-height: calc(100vh - 8rem); overflow-y: auto; font-size: 0.8rem;
+    }
+    @media (max-width: 1320px) { .doc-toc { display: none; } }
+    :root[data-width="medium"] .doc-toc { display: none; }
+    @media (min-width: 1640px) { :root[data-width="medium"] .doc-toc { display: block; } }
+    :root[data-width="wide"] .doc-toc { display: none; }
+    .doc-toc-title { text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.68rem; color: var(--text-dim); margin: 0 0 0.5rem 0.85rem; }
     .doc-toc ul { list-style: none; margin: 0; padding: 0; border-left: 1px solid var(--border); }
-    .doc-toc li a { display: block; padding: 0.2rem 0 0.2rem 0.85rem; margin-left: -1px; border-left: 2px solid transparent; color: var(--text-muted); text-decoration: none; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .doc-toc li a { display: block; padding: 0.25rem 0.6rem 0.25rem 0.85rem; margin-left: -1px; border-left: 2px solid transparent; color: var(--text-muted); text-decoration: none; line-height: 1.3; overflow-wrap: anywhere; }
     .doc-toc li a:hover { color: var(--text-bright); border-left-color: var(--accent); }
-    .doc-toc .toc-l2 a { padding-left: 1.7rem; }
-    .doc-toc .toc-l3 a { padding-left: 2.55rem; }
-    .doc-toc .toc-l4 a, .doc-toc .toc-l5 a, .doc-toc .toc-l6 a { padding-left: 3.4rem; }
+    .doc-toc .toc-l2 a { padding-left: 1.5rem; }
+    .doc-toc .toc-l3 a { padding-left: 2.15rem; }
+    .doc-toc .toc-l4 a, .doc-toc .toc-l5 a, .doc-toc .toc-l6 a { padding-left: 2.8rem; }
     .doc-content h1, .doc-content h2, .doc-content h3, .doc-content h4, .doc-content h5, .doc-content h6 { scroll-margin-top: 15rem; }
-    @media (max-width: 60rem) { .doc-layout.has-toc { display: block; } .doc-toc { display: none; } }
 
     /* --- Embedded markdown media (attachments from assets/) --- */
     .doc-content img { max-width: 100%; height: auto; border-radius: 4px; }
