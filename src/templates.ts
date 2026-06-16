@@ -25,12 +25,23 @@ function statusBadge(status?: string): string {
   return `<span class="status-badge">${esc(status)}</span>`;
 }
 
+const SAFE_LINK_SCHEMES = new Set(["http", "https", "mailto"]);
+
+// Block javascript:/data: and other non-allowlisted schemes — esc() only
+// HTML-escapes, it does not neutralize a dangerous URL scheme in an href.
+function isSafeLinkUrl(url: string): boolean {
+  const match = /^([a-z][a-z0-9+.-]*):/i.exec(url.trim());
+  if (!match) return true; // relative / scheme-less URL
+  return SAFE_LINK_SCHEMES.has(match[1].toLowerCase());
+}
+
 function linksRow(links: ContextMetadata["links"]): string {
   if (!links || links.length === 0) return "";
   const items = links
-    .map(
-      (l) =>
-        `<a class="ctx-link" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)}</a>`
+    .map((l) =>
+      isSafeLinkUrl(l.url)
+        ? `<a class="ctx-link" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)}</a>`
+        : `<span class="ctx-link ctx-link-blocked" title="Link blocked: unsupported URL scheme">${esc(l.label)}</span>`
     )
     .join(" ");
   return `<div class="ctx-links">${items}</div>`;
@@ -971,7 +982,15 @@ export function themeLabPage(): string {
         return s;
       }
       function persist(state) {
-        try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+        try {
+          // Read-modify-merge so we preserve sibling keys (e.g. the header's
+          // 'width') that share the same localStorage object — overwriting the
+          // whole object would silently drop the user's width preference.
+          var raw = localStorage.getItem(KEY);
+          var s = raw ? JSON.parse(raw) : {};
+          DIMENSIONS.forEach(function(k) { s[k] = state[k]; });
+          localStorage.setItem(KEY, JSON.stringify(s));
+        } catch (e) {}
       }
       function reflect(state) {
         DIMENSIONS.forEach(function(dim) {

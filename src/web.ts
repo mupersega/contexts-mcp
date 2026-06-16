@@ -182,9 +182,12 @@ app.post("/ctx/:context/meta", async (req, res) => {
       if (label && url) links.push({ label, url });
     }
     await storage.updateContextMetadata(req.params.context, {
-      title: body.title?.trim() || undefined,
-      description: body.description?.trim() || undefined,
-      status: body.status?.trim() || undefined,
+      // The form always submits these keys, so an empty value means "clear" —
+      // use ?? "" (a defined empty string storage writes through) rather than
+      // || undefined (which storage treats as "leave unchanged").
+      title: body.title?.trim() ?? "",
+      description: body.description?.trim() ?? "",
+      status: body.status?.trim() ?? "",
       tags: parseTags(body.tags),
       links,
     });
@@ -205,7 +208,7 @@ app.get("/ctx/:context.zip", async (req, res) => {
     await storage.listItems(ctx);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    res.status(404).send(msg);
+    res.status(404).send(escHtml(msg));
     return;
   }
 
@@ -397,11 +400,17 @@ app.post("/ctx/:context/:item/append", async (req, res) => {
     let revertOob = "";
     if (!hadBackup) {
       const base = `/ctx/${escHtml(context)}/${escHtml(itemName)}`;
+      // htmx positional OOB (beforeend:<selector>) swaps the OOB element's
+      // *content* into the target, not the element itself — so the attribute
+      // must sit on a wrapper, or only the bare "Revert" text node lands in
+      // .actions and the button is stripped (inert until reload).
       revertOob =
-        `<button type="button" class="btn btn-sm btn-danger" hx-swap-oob="beforeend:.actions"` +
+        `<div hx-swap-oob="beforeend:.actions">` +
+        `<button type="button" class="btn btn-sm btn-danger"` +
         ` hx-post="${base}/revert?ext=${escHtml(item.extension)}"` +
         ` hx-confirm="Revert '${escHtml(itemName)}.${escHtml(item.extension)}' to previous version? This is one-shot."` +
-        ` title="Restore the previous version. One-shot — cannot be undone.">Revert</button>`;
+        ` title="Restore the previous version. One-shot — cannot be undone.">Revert</button>` +
+        `</div>`;
     }
     res.send(contentHtml + revertOob);
   } catch (err: unknown) {
