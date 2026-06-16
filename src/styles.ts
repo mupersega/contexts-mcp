@@ -868,4 +868,6 @@ export const styles = `
     /* Inter-context wiki-links ([[item]]) resolved in rendered markdown. */
     .doc-content a.wikilink { color: var(--accent); text-decoration: none; border-bottom: 1px dotted var(--accent-line-hover); }
     .doc-content a.wikilink:hover { border-bottom-style: solid; color: var(--text-bright); }
+    .doc-content a.wikilink-missing { color: var(--text-dim); border-bottom: 1px dashed var(--text-dim); }
+    .doc-content a.wikilink-missing:hover { color: var(--text-muted); border-bottom-color: var(--text-muted); }
   `;

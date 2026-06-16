@@ -128,7 +128,7 @@ function embedMediaTags(html: string): string {
 // markdown into internal <a> links. Operates on the rendered HTML but skips
 // <pre>/<code> blocks so wiki syntax inside code samples is left verbatim.
 // Invalid targets (bad context/item name) are left as literal text.
-function renderWikiLinks(html: string, currentContext: string): string {
+function renderWikiLinks(html: string, currentContext: string, existing: Set<string>): string {
   const parts = html.split(/(<pre[\s\S]*?<\/pre>|<code[\s\S]*?<\/code>)/g);
   return parts
     .map((part, i) => {
@@ -147,7 +147,10 @@ function renderWikiLinks(html: string, currentContext: string): string {
         }
         if (!CONTEXT_NAME_REGEX.test(ctx) || !ITEM_NAME_REGEX.test(it)) return m;
         const label = (alias && String(alias).trim()) || (target.includes("/") ? it : target);
-        return `<a class="wikilink" href="/ctx/${ctx}/${it}">${escHtml(label)}</a>`;
+        const missing = !existing.has(`${ctx}/${it}`);
+        const cls = missing ? "wikilink wikilink-missing" : "wikilink";
+        const titleAttr = missing ? ' title="Unresolved link — no such item"' : "";
+        return `<a class="${cls}" href="/ctx/${ctx}/${it}"${titleAttr}>${escHtml(label)}</a>`;
       });
     })
     .join("");
@@ -388,7 +391,8 @@ app.get("/ctx/:context/:item", async (req, res) => {
       contentHtml = escHtml(rawItem.content);
     } else if (isMarkdown) {
       const anchored = anchorHeadings(await marked.parse(item.content));
-      contentHtml = renderWikiLinks(embedMediaTags(anchored.html), context);
+      const nodeIds = await graph.getNodeIds();
+      contentHtml = renderWikiLinks(embedMediaTags(anchored.html), context, nodeIds);
       toc = anchored.toc;
     } else {
       contentHtml = escHtml(item.content);

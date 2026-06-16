@@ -76,7 +76,8 @@ function seed(dataDir) {
       "## Composability With Other MCP Servers", "", para, "", para, "",
       "## See Also", "",
       "The evidence report at [[evidence]] collects screenshots for this project.",
-      "Background lives in [[query-target/findme]] and the [data bits config](/ctx/data-bits/config).", "",
+      "Background lives in [[query-target/findme]] and the [data bits config](/ctx/data-bits/config).",
+      "Planned but not yet written: [[future-notes]].", "",
     ].join("\n"),
   );
   write("alpha-notes/scratch.txt", "plain text item, no frontmatter, nothing fancy\n");

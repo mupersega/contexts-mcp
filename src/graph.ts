@@ -342,6 +342,13 @@ export function invalidateGraphCache(): void {
   _cache = null;
 }
 
+// Set of all existing node ids ("context/item") — used to flag unresolved
+// wiki-links. Hits the same cached graph as getGraph.
+export async function getNodeIds(): Promise<Set<string>> {
+  const g = await getGraph();
+  return new Set(g.nodes.map((n) => n.id));
+}
+
 export async function getItemConnections(context: string, item: string): Promise<ItemConnections> {
   const graph = await getGraph();
   const id = `${context}/${item}`;
