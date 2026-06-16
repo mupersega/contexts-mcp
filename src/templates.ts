@@ -418,7 +418,7 @@ export function contextListPage(
     <div class="card" style="margin-top:2rem;">
       <h3>New Context</h3>
       <div id="new-ctx-error"></div>
-      <form hx-post="/ctx" hx-target="#context-list" hx-swap="beforeend" hx-on::after-request="var slot=document.getElementById('new-ctx-error');if(event.detail.successful){this.reset();slot.innerHTML='';}else{slot.innerHTML=event.detail.xhr.responseText;}">
+      <form hx-post="/ctx" hx-swap="none" hx-on::after-request="var slot=document.getElementById('new-ctx-error');if(event.detail.successful){this.reset();slot.innerHTML='';htmx.ajax('GET',location.pathname+location.search,{target:'#context-list-region',swap:'outerHTML'});}else{slot.innerHTML=event.detail.xhr.responseText;}">
         <label for="name">Name</label>
         <input type="text" id="name" name="name" pattern="[a-zA-Z0-9_-]+" required placeholder="my-project">
         <button type="submit" class="btn btn-primary">Create</button>
