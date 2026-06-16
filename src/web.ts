@@ -28,6 +28,8 @@ import {
   itemEditPage,
   searchPage,
   themeLabPage,
+  anchorHeadings,
+  TocEntry,
 } from "./templates.js";
 import { loadConfig, MissingDataDirError, packageVersion } from "./config.js";
 
@@ -348,12 +350,15 @@ app.get("/ctx/:context/:item", async (req, res) => {
     const item = await storage.getItem(context, itemName, preferred);
     const isMarkdown = item.extension === "md";
     let contentHtml: string;
+    let toc: TocEntry[] = [];
     if (rawMode) {
       // Always show the verbatim file content in raw mode (md includes frontmatter).
       const rawItem = await storage.getItemRaw(context, itemName, preferred);
       contentHtml = escHtml(rawItem.content);
     } else if (isMarkdown) {
-      contentHtml = embedMediaTags(await marked.parse(item.content));
+      const anchored = anchorHeadings(await marked.parse(item.content));
+      contentHtml = embedMediaTags(anchored.html);
+      toc = anchored.toc;
     } else {
       contentHtml = escHtml(item.content);
     }
@@ -372,6 +377,7 @@ app.get("/ctx/:context/:item", async (req, res) => {
         isMarkdown,
         rawMode,
         hasBackup,
+        toc,
       )
     );
   } catch (err: unknown) {
