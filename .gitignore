@@ -10,3 +10,6 @@ contexts-data/
 
 # Local editor settings (personal Peacock colors, machine-specific)
 .vscode/
+
+# Autonomous QA walkthrough artifacts (screenshots, scratch)
+.qa-screens/
