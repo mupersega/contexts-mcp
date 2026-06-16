@@ -843,6 +843,7 @@ export const styles = `
     #graph-wrap { position: relative; margin-top: 1rem; border: 1px solid var(--border); background: var(--bg); overflow: hidden; }
     #graph-canvas { display: block; width: 100%; cursor: default; }
     .graph-intro { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.5rem; }
+    .graph-filter { width: 100%; max-width: 22rem; margin-bottom: 0.6rem; }
     #graph-empty { padding: 3rem; text-align: center; }
     .graph-legend { margin-top: 0.6rem; font-size: 0.68rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; }
     .graph-legend .lg-link { color: var(--text-muted); margin-right: 1.2rem; }

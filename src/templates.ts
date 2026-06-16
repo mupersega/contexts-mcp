@@ -872,7 +872,7 @@ const GRAPH_SCRIPT = `
   function v(name, fb){ var x = cs.getPropertyValue(name).trim(); return x || fb; }
   var ACCENT = v('--accent','#4ade80'), MUTED = v('--text-muted','#7d8491'),
       DIM = v('--text-dim','#5a6070'), BRIGHT = v('--text-bright','#e6e8ec');
-  var nodes = [], edges = [], byId = {}, colorOf = {}, hover = null, drag = null, moved = false;
+  var nodes = [], edges = [], byId = {}, colorOf = {}, hover = null, drag = null, moved = false, filter = '';
   function nodeR(n){ return 4 + Math.min(11, n.degree * 1.6); }
 
   resize();
@@ -921,25 +921,30 @@ const GRAPH_SCRIPT = `
       p.x=Math.max(14,Math.min(W-14,p.x)); p.y=Math.max(14,Math.min(H-14,p.y));
     }
   }
+  function matches(n){ return !filter || String(n.label).toLowerCase().indexOf(filter)>=0 || String(n.context).toLowerCase().indexOf(filter)>=0; }
   function draw(){
     ctx.clearRect(0,0,W,H);
     for (var e=0;e<edges.length;e++){
       var ed=edges[e];
+      var edim = filter && !(matches(ed.s) || matches(ed.t));
       ctx.beginPath(); ctx.moveTo(ed.s.x,ed.s.y); ctx.lineTo(ed.t.x,ed.t.y);
-      if (ed.kind==='link'){ ctx.strokeStyle=MUTED; ctx.globalAlpha=0.5; ctx.lineWidth=1; ctx.setLineDash([]); }
-      else { ctx.strokeStyle=DIM; ctx.globalAlpha=0.4; ctx.lineWidth=1; ctx.setLineDash([3,3]); }
+      if (ed.kind==='link'){ ctx.strokeStyle=MUTED; ctx.globalAlpha= edim?0.06:0.5; ctx.lineWidth=1; ctx.setLineDash([]); }
+      else { ctx.strokeStyle=DIM; ctx.globalAlpha= edim?0.05:0.4; ctx.lineWidth=1; ctx.setLineDash([3,3]); }
       ctx.stroke(); ctx.globalAlpha=1; ctx.setLineDash([]);
     }
     for (var i=0;i<nodes.length;i++){
       var n=nodes[i], r=nodeR(n);
+      ctx.globalAlpha = (filter && !matches(n)) ? 0.13 : 1;
       ctx.beginPath(); ctx.arc(n.x,n.y,r,0,Math.PI*2);
       ctx.fillStyle = (n===hover)?BRIGHT:(colorOf[n.context]||ACCENT); ctx.fill();
       if (n===hover){ ctx.lineWidth=1.5; ctx.strokeStyle=(colorOf[n.context]||ACCENT); ctx.stroke(); }
+      ctx.globalAlpha = 1;
     }
     ctx.font='10px "IBM Plex Mono", monospace'; ctx.textAlign='left'; ctx.textBaseline='middle';
     for (var l=0;l<nodes.length;l++){
       var m=nodes[l];
-      if (m===hover || m.degree>=3){
+      var show = (m===hover) || (filter ? matches(m) : m.degree>=3);
+      if (show){
         ctx.fillStyle = (m===hover)?BRIGHT:MUTED;
         ctx.fillText(String(m.label).slice(0,28), m.x + nodeR(m) + 5, m.y);
       }
@@ -962,6 +967,8 @@ const GRAPH_SCRIPT = `
     if (!moved && n===drag){ window.location.href='/ctx/'+encodeURIComponent(drag.context)+'/'+encodeURIComponent(drag.item); }
     drag.fixed=false; drag=null;
   });
+  var fin = document.getElementById('graph-filter');
+  if (fin) fin.addEventListener('input', function(){ filter = fin.value.trim().toLowerCase(); });
   window.addEventListener('resize', resize);
 })();
 `;
@@ -973,6 +980,7 @@ export function graphPage(): string {
     <div class="breadcrumb"><a href="/">Contexts</a> / <strong>Graph</strong></div>
     <h2>Context Graph</h2>
     <p class="graph-intro">Every item is a node. Solid edges are explicit links; dashed edges are semantically related items. Drag to rearrange, click a node to open it.</p>
+    <input type="text" id="graph-filter" class="graph-filter" placeholder="Filter nodes by title or context…" autocomplete="off">
     <div id="graph-wrap">
       <canvas id="graph-canvas"></canvas>
       <div id="graph-empty" class="empty" style="display:none;">No items to graph yet.</div>
