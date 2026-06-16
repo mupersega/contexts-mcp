@@ -390,7 +390,20 @@ export async function createContext(name: string): Promise<void> {
     throw new Error(`Context '${name}' already exists`);
   } catch (err: unknown) {
     if (err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") {
-      await fs.mkdir(dir, { recursive: true });
+      try {
+        await fs.mkdir(dir, { recursive: true });
+      } catch (mkErr: unknown) {
+        // The name passed the regex but the OS rejected the resulting path
+        // (typically too long). Normalize rather than leak the absolute path.
+        const code =
+          mkErr instanceof Error && "code" in mkErr
+            ? (mkErr as NodeJS.ErrnoException).code
+            : undefined;
+        if (code === "ENAMETOOLONG" || code === "ENOENT" || code === "EINVAL") {
+          throw new Error(`Invalid context name '${name}': name too long`);
+        }
+        throw mkErr;
+      }
       await touchContext(name);
       return;
     }
@@ -400,7 +413,9 @@ export async function createContext(name: string): Promise<void> {
 
 export async function deleteContext(name: string): Promise<void> {
   const dir = resolveContextPath(name);
-  await fs.access(dir);
+  await fs.access(dir).catch(() => {
+    throw new Error(`Context '${name}' not found`);
+  });
   await fs.rm(dir, { recursive: true, force: true });
 }
 

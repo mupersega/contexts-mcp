@@ -25,12 +25,23 @@ function statusBadge(status?: string): string {
   return `<span class="status-badge">${esc(status)}</span>`;
 }
 
+const SAFE_LINK_SCHEMES = new Set(["http", "https", "mailto"]);
+
+// Block javascript:/data: and other non-allowlisted schemes — esc() only
+// HTML-escapes, it does not neutralize a dangerous URL scheme in an href.
+function isSafeLinkUrl(url: string): boolean {
+  const match = /^([a-z][a-z0-9+.-]*):/i.exec(url.trim());
+  if (!match) return true; // relative / scheme-less URL
+  return SAFE_LINK_SCHEMES.has(match[1].toLowerCase());
+}
+
 function linksRow(links: ContextMetadata["links"]): string {
   if (!links || links.length === 0) return "";
   const items = links
-    .map(
-      (l) =>
-        `<a class="ctx-link" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)}</a>`
+    .map((l) =>
+      isSafeLinkUrl(l.url)
+        ? `<a class="ctx-link" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)}</a>`
+        : `<span class="ctx-link ctx-link-blocked" title="Link blocked: unsupported URL scheme">${esc(l.label)}</span>`
     )
     .join(" ");
   return `<div class="ctx-links">${items}</div>`;
@@ -108,6 +119,37 @@ export function layout(title: string, body: string): string {
     </footer>
   </div>
   <script>
+  (function() {
+    // Surface server error bodies into a shared #flash region. htmx 2.x drops
+    // 4xx/5xx responses by default (swap:false), so without this a rejected
+    // action (e.g. reverting an item whose backup is already gone) gives the
+    // user no visible feedback at all.
+    function flashRegion() {
+      var el = document.getElementById('flash');
+      if (el) return el;
+      el = document.createElement('div');
+      el.id = 'flash';
+      el.setAttribute('aria-live', 'polite');
+      var header = document.querySelector('.container > header');
+      if (header && header.parentNode) header.parentNode.insertBefore(el, header.nextSibling);
+      else document.body.insertBefore(el, document.body.firstChild);
+      return el;
+    }
+    document.body.addEventListener('htmx:beforeSwap', function(evt) {
+      var d = evt.detail;
+      // Forms that render their own inline error opt out via data-flash="off".
+      if (d.elt && d.elt.getAttribute && d.elt.getAttribute('data-flash') === 'off') return;
+      if (d.isError && d.xhr && d.xhr.responseText) {
+        d.shouldSwap = true;
+        d.isError = false;
+        d.target = flashRegion();
+        d.swapOverride = 'innerHTML';
+      } else if (!d.isError) {
+        var prev = document.getElementById('flash');
+        if (prev && d.target !== prev) prev.innerHTML = '';
+      }
+    });
+  })();
   (function() {
     var c = document.getElementById('noise-canvas');
     if (!c) return;
@@ -417,7 +459,8 @@ export function contextListPage(
     ${contextListRegionFragment(contexts, controls)}
     <div class="card" style="margin-top:2rem;">
       <h3>New Context</h3>
-      <form hx-post="/ctx" hx-target="#context-list" hx-swap="beforeend" hx-on::after-request="if(event.detail.successful) this.reset()">
+      <div id="new-ctx-error"></div>
+      <form hx-post="/ctx" hx-swap="none" data-flash="off" hx-on::after-request="var slot=document.getElementById('new-ctx-error');if(event.detail.successful){this.reset();slot.innerHTML='';htmx.ajax('GET',location.pathname+location.search,{target:'#context-list-region',swap:'outerHTML'});}else{slot.innerHTML=event.detail.xhr.responseText;}">
         <label for="name">Name</label>
         <input type="text" id="name" name="name" pattern="[a-zA-Z0-9_-]+" required placeholder="my-project">
         <button type="submit" class="btn btn-primary">Create</button>
@@ -621,6 +664,7 @@ export function itemListPage(
               <option value="txt">Plain text (.txt)</option>
               <option value="json">JSON (.json)</option>
               <option value="yaml">YAML (.yaml)</option>
+              <option value="yml">YAML (.yml)</option>
               <option value="csv">CSV (.csv)</option>
               <option value="sql">SQL (.sql)</option>
             </select>
@@ -969,7 +1013,15 @@ export function themeLabPage(): string {
         return s;
       }
       function persist(state) {
-        try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+        try {
+          // Read-modify-merge so we preserve sibling keys (e.g. the header's
+          // 'width') that share the same localStorage object — overwriting the
+          // whole object would silently drop the user's width preference.
+          var raw = localStorage.getItem(KEY);
+          var s = raw ? JSON.parse(raw) : {};
+          DIMENSIONS.forEach(function(k) { s[k] = state[k]; });
+          localStorage.setItem(KEY, JSON.stringify(s));
+        } catch (e) {}
       }
       function reflect(state) {
         DIMENSIONS.forEach(function(dim) {
@@ -989,7 +1041,15 @@ export function themeLabPage(): string {
       }
       function resetAll() {
         DIMENSIONS.forEach(function(k) { root.removeAttribute('data-' + k); });
-        try { localStorage.removeItem(KEY); } catch (e) {}
+        try {
+          // Remove only the theme DIMENSION keys, preserving sibling keys (e.g.
+          // the header's 'width') in the shared object; drop it only if empty.
+          var raw = localStorage.getItem(KEY);
+          var s = raw ? JSON.parse(raw) : {};
+          DIMENSIONS.forEach(function(k) { delete s[k]; });
+          if (Object.keys(s).length) localStorage.setItem(KEY, JSON.stringify(s));
+          else localStorage.removeItem(KEY);
+        } catch (e) {}
         reflect(readCurrent());
       }
 

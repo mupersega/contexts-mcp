@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import matter from "gray-matter";
-import { ContextMetadata, ItemExtension } from "./types.js";
+import { ContextMetadata, ItemExtension, CONTEXT_NAME_REGEX } from "./types.js";
 import { getContextMetadata, splitItemFilename } from "./storage.js";
 
 export interface SearchResult {
@@ -36,7 +36,7 @@ interface ItemContent {
 }
 
 async function selectContexts(dataDir: string, contextFilter?: string): Promise<string[]> {
-  if (contextFilter) return [contextFilter];
+  if (contextFilter) return CONTEXT_NAME_REGEX.test(contextFilter) ? [contextFilter] : [];
   const entries = await fs.readdir(dataDir, { withFileTypes: true });
   return entries.filter((e) => e.isDirectory()).map((e) => e.name);
 }
