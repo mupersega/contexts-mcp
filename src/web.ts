@@ -572,13 +572,13 @@ app.get("/diagnose", async (_req, res) => {
 // Purely client-side state — no params, no persistence here. The page
 // renders the same HTML for everyone; the inline script reads localStorage
 // and applies data-* attributes to <html>.
-app.get("/graph", (_req, res) => {
-  res.send(graphPage());
+app.get("/graph", (req, res) => {
+  res.send(graphPage(parseTruthy(req.query.archived)));
 });
 
-app.get("/graph.json", async (_req, res) => {
+app.get("/graph.json", async (req, res) => {
   try {
-    res.json(await graph.getGraph());
+    res.json(await graph.getGraph(parseTruthy(req.query.archived)));
   } catch (err: unknown) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }

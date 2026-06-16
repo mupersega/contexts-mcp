@@ -252,13 +252,14 @@ interface NodeContent {
   content: string;
 }
 
-export async function buildGraph(): Promise<Graph> {
+export async function buildGraph(includeArchived = false): Promise<Graph> {
   const corpus = await storage.getAllItemsContent();
 
   // One node per item, keyed by context/baseName. Prefer markdown content when a
   // base name exists in multiple kinds (md is the linkable/readable variant).
   const nodeMap = new Map<string, NodeContent>();
   for (const it of corpus) {
+    if (it.archived && !includeArchived) continue;
     const id = `${it.context}/${it.name}`;
     const existing = nodeMap.get(id);
     if (!existing || it.extension === "md") {
@@ -327,30 +328,38 @@ function undirectedKey(a: string, b: string): string {
 
 // --- Cached accessors ---
 
-let _cache: { graph: Graph; at: number } | null = null;
+const _cache = new Map<string, { graph: Graph; at: number }>();
 const CACHE_TTL_MS = 5000;
 
-export async function getGraph(): Promise<Graph> {
+export async function getGraph(includeArchived = false): Promise<Graph> {
+  const key = includeArchived ? "all" : "active";
   const now = Date.now();
-  if (_cache && now - _cache.at < CACHE_TTL_MS) return _cache.graph;
-  const graph = await buildGraph();
-  _cache = { graph, at: now };
+  const hit = _cache.get(key);
+  if (hit && now - hit.at < CACHE_TTL_MS) return hit.graph;
+  const graph = await buildGraph(includeArchived);
+  _cache.set(key, { graph, at: now });
   return graph;
 }
 
 export function invalidateGraphCache(): void {
-  _cache = null;
+  _cache.clear();
 }
 
 // Set of all existing node ids ("context/item") — used to flag unresolved
-// wiki-links. Hits the same cached graph as getGraph.
+// wiki-links. Includes archived items so links to them still resolve.
 export async function getNodeIds(): Promise<Set<string>> {
-  const g = await getGraph();
+  const g = await getGraph(true);
   return new Set(g.nodes.map((n) => n.id));
 }
 
-export async function getItemConnections(context: string, item: string): Promise<ItemConnections> {
-  const graph = await getGraph();
+// Connections include archived by default so viewing any item (even an archived
+// one) shows its full link set; the /graph overview excludes archived by default.
+export async function getItemConnections(
+  context: string,
+  item: string,
+  includeArchived = true
+): Promise<ItemConnections> {
+  const graph = await getGraph(includeArchived);
   const id = `${context}/${item}`;
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
   const ref = (nid: string): ConnRef => {

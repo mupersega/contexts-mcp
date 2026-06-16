@@ -876,7 +876,7 @@ const GRAPH_SCRIPT = `
   function nodeR(n){ return 4 + Math.min(11, n.degree * 1.6); }
 
   resize();
-  fetch('/graph.json').then(function(r){ return r.json(); }).then(function(g){
+  fetch('/graph.json' + (window.location.search || '')).then(function(r){ return r.json(); }).then(function(g){
     if (!g.nodes || !g.nodes.length){ if(empty) empty.style.display='block'; return; }
     var ns = g.nodes.slice().sort(function(a,b){ return b.degree-a.degree; }).slice(0, 200);
     var ok = {}; ns.forEach(function(n){ ok[n.id]=true; });
@@ -973,7 +973,7 @@ const GRAPH_SCRIPT = `
 })();
 `;
 
-export function graphPage(): string {
+export function graphPage(includeArchived = false): string {
   return layout(
     "Graph",
     `
@@ -981,6 +981,7 @@ export function graphPage(): string {
     <h2>Context Graph</h2>
     <p class="graph-intro">Every item is a node. Solid edges are explicit links; dashed edges are semantically related items. Drag to rearrange, click a node to open it.</p>
     <input type="text" id="graph-filter" class="graph-filter" placeholder="Filter nodes by title or context…" autocomplete="off">
+    <a class="graph-archived-toggle" href="${includeArchived ? "/graph" : "/graph?archived=1"}">${includeArchived ? "Hide archived" : "Show archived"}</a>
     <div id="graph-wrap">
       <canvas id="graph-canvas"></canvas>
       <div id="graph-empty" class="empty" style="display:none;">No items to graph yet.</div>

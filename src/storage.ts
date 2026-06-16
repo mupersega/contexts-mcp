@@ -559,7 +559,7 @@ export async function deleteAttachment(context: string, filename: string): Promi
 // graph is built from. Spans everything (including archived). Skips unreadable
 // entries rather than failing the whole build.
 export async function getAllItemsContent(): Promise<
-  { context: string; name: string; extension: ItemExtension; title: string; content: string }[]
+  { context: string; name: string; extension: ItemExtension; title: string; content: string; archived: boolean }[]
 > {
   const out: {
     context: string;
@@ -567,9 +567,11 @@ export async function getAllItemsContent(): Promise<
     extension: ItemExtension;
     title: string;
     content: string;
+    archived: boolean;
   }[] = [];
-  const contexts = await listContexts({ includeArchived: true });
+  const contexts = await listContexts({ includeArchived: true, includeMetadata: true });
   for (const c of contexts) {
+    const archived = c.metadata?.status === "archived";
     let items: ItemInfo[];
     try {
       items = await listItems(c.name);
@@ -585,6 +587,7 @@ export async function getAllItemsContent(): Promise<
           extension: it.extension,
           title: it.title || it.name,
           content: full.content,
+          archived,
         });
       } catch {
         /* skip unreadable */

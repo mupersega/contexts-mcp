@@ -210,6 +210,18 @@ async function run() {
     graph.invalidateGraphCache();
   });
 
+  await check("graph: archived contexts excluded by default, included on opt-in", async () => {
+    await storage.createContext("garc");
+    await storage.updateContextMetadata("garc", { status: "archived" });
+    await storage.createItem("garc", "secret", "md", { content: "an archived item" });
+    graph.invalidateGraphCache();
+    const def = await graph.getGraph(); // default = exclude archived
+    if (def.nodes.some((n) => n.id === "garc/secret")) throw new Error("archived item leaked into default graph");
+    const all = await graph.getGraph(true);
+    if (!all.nodes.some((n) => n.id === "garc/secret")) throw new Error("archived item missing from include-archived graph");
+    graph.invalidateGraphCache();
+  });
+
   console.log("");
   if (failed > 0) {
     console.error(`${failed} check(s) failed`);
