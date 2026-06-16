@@ -846,6 +846,8 @@ export const styles = `
     .graph-filter { width: 100%; max-width: 22rem; margin-bottom: 0.6rem; }
     .graph-archived-toggle { display: inline-block; margin-left: 0.75rem; font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; }
     .graph-archived-toggle:hover { color: var(--text-muted); }
+    .conn-badge { display: inline-block; margin-top: 0.6rem; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); border: 1px solid var(--border); border-radius: 3px; padding: 0.1rem 0.45rem; text-decoration: none; }
+    .conn-badge:hover { color: var(--text-bright); border-color: var(--accent-line-hover); }
     #graph-empty { padding: 3rem; text-align: center; }
     .graph-legend { margin-top: 0.6rem; font-size: 0.68rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; }
     .graph-legend .lg-link { color: var(--text-muted); margin-right: 1.2rem; }

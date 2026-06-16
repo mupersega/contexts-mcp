@@ -308,7 +308,14 @@ app.get("/ctx/:context", async (req, res) => {
   try {
     const items = await storage.listItems(req.params.context);
     const meta = await storage.getContextMetadata(req.params.context);
-    res.send(itemListPage(req.params.context, meta, items));
+    const degrees: Record<string, number> = {};
+    try {
+      const g = await graph.getGraph(true);
+      for (const n of g.nodes) if (n.context === req.params.context) degrees[n.item] = n.degree;
+    } catch {
+      /* graph unavailable — render the list without connection badges */
+    }
+    res.send(itemListPage(req.params.context, meta, items, degrees));
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     res.status(404).send(layout("Not Found", `<div class="flash flash-error">${escHtml(msg)}</div>`));

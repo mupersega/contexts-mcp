@@ -677,13 +677,20 @@ export function itemCardFragment(context: string, item: ItemInfo): string {
 export function itemListPage(
   context: string,
   meta: ContextMetadata,
-  items: ItemInfo[]
+  items: ItemInfo[],
+  degrees: Record<string, number> = {}
 ): string {
+  const connBadge = (name: string): string => {
+    const d = degrees[name] || 0;
+    return d > 0
+      ? `<a class="conn-badge" href="/ctx/${esc(context)}/${esc(name)}" title="${d} connection${d === 1 ? "" : "s"} in the graph">${d} linked</a>`
+      : "";
+  };
   const list = items.length
     ? items
         .map(
           (i) => `
-      <div class="card" id="item-${esc(i.name)}-${esc(i.extension)}">${itemCardInner(context, i)}</div>`
+      <div class="card" id="item-${esc(i.name)}-${esc(i.extension)}">${itemCardInner(context, i)}${connBadge(i.name)}</div>`
         )
         .join("")
     : `<div class="empty">No items yet. Create one below.</div>`;
