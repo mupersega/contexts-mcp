@@ -1041,7 +1041,15 @@ export function themeLabPage(): string {
       }
       function resetAll() {
         DIMENSIONS.forEach(function(k) { root.removeAttribute('data-' + k); });
-        try { localStorage.removeItem(KEY); } catch (e) {}
+        try {
+          // Remove only the theme DIMENSION keys, preserving sibling keys (e.g.
+          // the header's 'width') in the shared object; drop it only if empty.
+          var raw = localStorage.getItem(KEY);
+          var s = raw ? JSON.parse(raw) : {};
+          DIMENSIONS.forEach(function(k) { delete s[k]; });
+          if (Object.keys(s).length) localStorage.setItem(KEY, JSON.stringify(s));
+          else localStorage.removeItem(KEY);
+        } catch (e) {}
         reflect(readCurrent());
       }
 
