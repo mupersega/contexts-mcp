@@ -32,7 +32,7 @@ import {
 import { loadConfig, MissingDataDirError, packageVersion } from "./config.js";
 
 const app = express();
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
 // --- Helpers ---
 
@@ -254,6 +254,10 @@ app.post("/ctx/:context/items", async (req, res) => {
       res.status(400).send(`<div class="flash flash-error">Invalid item name.</div>`);
       return;
     }
+    if (typeof extension === "string" && extension.length > 0 && !parseExtQuery(extension)) {
+      res.status(400).send(`<div class="flash flash-error">Invalid item extension.</div>`);
+      return;
+    }
     const ext = parseExtQuery(extension) || "md";
     const tags = parseTags(rawTags);
     await storage.createItem(req.params.context, item, ext, {
@@ -378,13 +382,28 @@ app.post("/ctx/:context/:item/append", async (req, res) => {
   try {
     const { context, item: itemName } = req.params;
     const preferred = parseExtQuery(req.query.ext);
+    const hadBackup = await storage.hasBackup(context, itemName, preferred);
     await storage.appendToItem(context, itemName, req.body.content || "", preferred);
     const item = await storage.getItem(context, itemName, preferred);
     const isMarkdown = item.extension === "md";
     const contentHtml = isMarkdown
       ? await marked.parse(item.content)
       : escHtml(item.content);
-    res.send(contentHtml);
+    // The append form swaps only #doc-body, which sits below the action bar. A
+    // successful append writes a one-shot .bak; if this append created the FIRST
+    // backup, OOB-inject the Revert button into .actions so it surfaces without a
+    // reload (mirrors the markup in itemViewPage). Idempotent: once a backup
+    // exists, hadBackup is true on the next append, so it is not injected twice.
+    let revertOob = "";
+    if (!hadBackup) {
+      const base = `/ctx/${escHtml(context)}/${escHtml(itemName)}`;
+      revertOob =
+        `<button type="button" class="btn btn-sm btn-danger" hx-swap-oob="beforeend:.actions"` +
+        ` hx-post="${base}/revert?ext=${escHtml(item.extension)}"` +
+        ` hx-confirm="Revert '${escHtml(itemName)}.${escHtml(item.extension)}' to previous version? This is one-shot."` +
+        ` title="Restore the previous version. One-shot — cannot be undone.">Revert</button>`;
+    }
+    res.send(contentHtml + revertOob);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     res.status(400).send(`<div class="flash flash-error">${escHtml(msg)}</div>`);
@@ -466,6 +485,25 @@ app.post("/shutdown", (_req, res) => {
   );
   setTimeout(() => process.exit(0), 200);
 });
+
+// --- Error handling ---
+
+// Body-parser failures (e.g. PayloadTooLargeError) and any uncaught route error
+// land here. Respond with the app's flash-error convention rather than Express's
+// default stack-trace page, which would otherwise leak absolute server paths.
+app.use(
+  (err: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    const tooLarge =
+      typeof err === "object" &&
+      err !== null &&
+      "type" in err &&
+      (err as { type?: string }).type === "entity.too.large";
+    const status = tooLarge ? 413 : 500;
+    const msg = tooLarge ? "Request body too large." : "Something went wrong.";
+    const body = `<div class="flash flash-error">${escHtml(msg)}</div>`;
+    res.status(status).send(req.get("HX-Request") === "true" ? body : layout("Error", body));
+  }
+);
 
 // --- Start ---
 

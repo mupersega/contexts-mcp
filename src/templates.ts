@@ -417,7 +417,8 @@ export function contextListPage(
     ${contextListRegionFragment(contexts, controls)}
     <div class="card" style="margin-top:2rem;">
       <h3>New Context</h3>
-      <form hx-post="/ctx" hx-target="#context-list" hx-swap="beforeend" hx-on::after-request="if(event.detail.successful) this.reset()">
+      <div id="new-ctx-error"></div>
+      <form hx-post="/ctx" hx-target="#context-list" hx-swap="beforeend" hx-on::after-request="var slot=document.getElementById('new-ctx-error');if(event.detail.successful){this.reset();slot.innerHTML='';}else{slot.innerHTML=event.detail.xhr.responseText;}">
         <label for="name">Name</label>
         <input type="text" id="name" name="name" pattern="[a-zA-Z0-9_-]+" required placeholder="my-project">
         <button type="submit" class="btn btn-primary">Create</button>
@@ -621,6 +622,7 @@ export function itemListPage(
               <option value="txt">Plain text (.txt)</option>
               <option value="json">JSON (.json)</option>
               <option value="yaml">YAML (.yaml)</option>
+              <option value="yml">YAML (.yml)</option>
               <option value="csv">CSV (.csv)</option>
               <option value="sql">SQL (.sql)</option>
             </select>
