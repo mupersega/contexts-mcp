@@ -47,6 +47,49 @@ function linksRow(links: ContextMetadata["links"]): string {
   return `<div class="ctx-links">${items}</div>`;
 }
 
+export interface TocEntry {
+  level: number;
+  text: string;
+  id: string;
+}
+
+// Inject anchor ids into rendered <h1..h6> tags and pull out a flat table of
+// contents. Operates on marked's HTML output (not the raw markdown) so the TOC
+// ids are guaranteed to match the heading ids the browser actually anchors to.
+export function anchorHeadings(html: string): { html: string; toc: TocEntry[] } {
+  const counts = new Map<string, number>();
+  const toc: TocEntry[] = [];
+  const slug = (text: string): string => {
+    const base =
+      text
+        .toLowerCase()
+        .replace(/&[a-z]+;/g, "")
+        .replace(/[^\w\s-]/g, "")
+        .trim()
+        .replace(/\s+/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-+|-+$/g, "") || "section";
+    const n = counts.get(base) ?? 0;
+    counts.set(base, n + 1);
+    return n === 0 ? base : `${base}-${n}`;
+  };
+  const out = html.replace(
+    /<h([1-6])([^>]*)>([\s\S]*?)<\/h\1>/g,
+    (_m, level: string, attrs: string, inner: string) => {
+      const text = inner.replace(/<[^>]+>/g, "").trim();
+      const existing = /\bid="([^"]*)"/.exec(attrs);
+      if (existing) {
+        toc.push({ level: Number(level), text, id: existing[1] });
+        return `<h${level}${attrs}>${inner}</h${level}>`;
+      }
+      const id = slug(text);
+      toc.push({ level: Number(level), text, id });
+      return `<h${level}${attrs} id="${id}">${inner}</h${level}>`;
+    }
+  );
+  return { html: out, toc };
+}
+
 function displayContextTitle(summary: ContextSummary): string {
   const metaTitle = summary.metadata?.title;
   return metaTitle && metaTitle.trim().length > 0 ? metaTitle : summary.name;
@@ -694,6 +737,7 @@ export function itemViewPage(
   isMarkdown: boolean,
   rawMode: boolean = false,
   hasBackup: boolean = false,
+  toc: TocEntry[] = [],
 ): string {
   const appendSupported =
     !rawMode && (isMarkdown || extension === "txt" || extension === "csv" || extension === "sql");
@@ -716,6 +760,18 @@ export function itemViewPage(
   const viewUrl = `/ctx/${esc(context)}/${esc(name)}?ext=${esc(extension)}`;
   const rawToggleHref = rawMode ? viewUrl : `${viewUrl}&raw=1`;
   const rawToggleLabel = rawMode ? "Rendered" : "Raw";
+
+  // Left-rail table of contents, deduced from the rendered markdown headings.
+  // Only shown for rendered markdown with more than one heading.
+  const tocHtml =
+    isMarkdown && !rawMode && toc.length > 1
+      ? `<nav class="doc-toc" aria-label="Table of contents">
+        <div class="doc-toc-title">On this page</div>
+        <ul>${toc
+          .map((t) => `<li class="toc-l${t.level}"><a href="#${esc(t.id)}">${t.text}</a></li>`)
+          .join("")}</ul>
+      </nav>`
+      : "";
 
   return layout(
     title,
@@ -741,7 +797,10 @@ export function itemViewPage(
         ${hasBackup ? `<button type="button" class="btn btn-sm btn-danger" hx-post="/ctx/${esc(context)}/${esc(name)}/revert?ext=${esc(extension)}" hx-confirm="Revert '${esc(name)}.${esc(extension)}' to previous version? This is one-shot." title="Restore the previous version. One-shot — cannot be undone.">Revert</button>` : ""}
       </div>
     </div>
-    <div class="${contentClass}" id="doc-body">${contentHtml}</div>
+    <div class="doc-layout${tocHtml ? " has-toc" : ""}">
+      ${tocHtml}
+      <div class="${contentClass}" id="doc-body">${contentHtml}</div>
+    </div>
     ${appendForm}`
   );
 }

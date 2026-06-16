@@ -60,7 +60,15 @@ function seed(dataDir) {
   );
   write(
     "alpha-notes/readme.md",
-    ["---", "title: Read Me First", "tags: [intro, guide]", "---", "", "# Alpha", "", "Some **markdown** with a [link](https://example.com).", ""].join("\n"),
+    [
+      "---", "title: Read Me First", "tags: [intro, guide]", "---", "",
+      "# Alpha Notes", "", "Intro paragraph with a [link](https://example.com).", "",
+      "## Getting Started", "", "Some **markdown** body text.", "",
+      "### Installation", "", "Install steps go here.", "",
+      "### Configuration", "", "Config details go here.", "",
+      "## Usage", "", "How to use it.", "",
+      "## Troubleshooting", "", "Problems and fixes.", "",
+    ].join("\n"),
   );
   write("alpha-notes/scratch.txt", "plain text item, no frontmatter, nothing fancy\n");
 
