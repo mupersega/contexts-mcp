@@ -123,6 +123,35 @@ function embedMediaTags(html: string): string {
   });
 }
 
+// Resolve [[item]] / [[context/item]] (optional |alias) wiki-links in rendered
+// markdown into internal <a> links. Operates on the rendered HTML but skips
+// <pre>/<code> blocks so wiki syntax inside code samples is left verbatim.
+// Invalid targets (bad context/item name) are left as literal text.
+function renderWikiLinks(html: string, currentContext: string): string {
+  const parts = html.split(/(<pre[\s\S]*?<\/pre>|<code[\s\S]*?<\/code>)/g);
+  return parts
+    .map((part, i) => {
+      if (i % 2 === 1) return part; // a captured code/pre block — leave alone
+      return part.replace(/\[\[\s*([^\]|]+?)\s*(?:\|([^\]]*))?\]\]/g, (m, rawTarget, alias) => {
+        const target = String(rawTarget).trim();
+        let ctx: string;
+        let it: string;
+        if (target.includes("/")) {
+          const idx = target.indexOf("/");
+          ctx = target.slice(0, idx);
+          it = target.slice(idx + 1);
+        } else {
+          ctx = currentContext;
+          it = target;
+        }
+        if (!CONTEXT_NAME_REGEX.test(ctx) || !ITEM_NAME_REGEX.test(it)) return m;
+        const label = (alias && String(alias).trim()) || (target.includes("/") ? it : target);
+        return `<a class="wikilink" href="/ctx/${ctx}/${it}">${escHtml(label)}</a>`;
+      });
+    })
+    .join("");
+}
+
 // --- Context routes ---
 
 app.get("/", async (req, res) => {
@@ -358,7 +387,7 @@ app.get("/ctx/:context/:item", async (req, res) => {
       contentHtml = escHtml(rawItem.content);
     } else if (isMarkdown) {
       const anchored = anchorHeadings(await marked.parse(item.content));
-      contentHtml = embedMediaTags(anchored.html);
+      contentHtml = renderWikiLinks(embedMediaTags(anchored.html), context);
       toc = anchored.toc;
     } else {
       contentHtml = escHtml(item.content);

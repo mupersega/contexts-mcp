@@ -836,4 +836,7 @@ export const styles = `
     .doc-content audio.doc-media { display: block; width: 100%; margin: 1rem 0; }
     .doc-content a.doc-attachment { display: inline-block; padding: 0.3rem 0.7rem; margin: 0.25rem 0; border: 1px solid var(--border); border-radius: 4px; color: var(--accent); text-decoration: none; }
     .doc-content a.doc-attachment:hover { border-color: var(--accent-line-hover); }
+    /* Inter-context wiki-links ([[item]]) resolved in rendered markdown. */
+    .doc-content a.wikilink { color: var(--accent); text-decoration: none; border-bottom: 1px dotted var(--accent-line-hover); }
+    .doc-content a.wikilink:hover { border-bottom-style: solid; color: var(--text-bright); }
   `;
