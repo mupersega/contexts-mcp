@@ -21,8 +21,11 @@ import {
   AddAttachmentArgsSchema,
   ListAttachmentsArgsSchema,
   DeleteAttachmentArgsSchema,
+  GetItemLinksArgsSchema,
+  GetGraphArgsSchema,
 } from "./types.js";
 import * as storage from "./storage.js";
+import * as graph from "./graph.js";
 import { searchContexts } from "./search.js";
 import { loadConfig, MissingDataDirError, packageVersion } from "./config.js";
 
@@ -395,6 +398,55 @@ server.registerTool(
   async (args) => {
     await storage.deleteAttachment(args.context, args.filename);
     return text(`Attachment '${args.filename}' deleted from '${args.context}'.`);
+  }
+);
+
+server.registerTool(
+  "get_item_links",
+  {
+    description:
+      "Show an item's connections in the context graph: outbound links it makes, backlinks (items that link to it), and semantically-related items.",
+    inputSchema: GetItemLinksArgsSchema.shape,
+  },
+  async (args) => {
+    const c = await graph.getItemConnections(args.context, args.item);
+    const line = (r: { context: string; item: string; title: string; score?: number }) =>
+      `  - ${r.context}/${r.item}${typeof r.score === "number" ? ` (${Math.round(r.score * 100) / 100})` : ""} — ${r.title}`;
+    const fmt = (refs: { context: string; item: string; title: string; score?: number }[]) =>
+      refs.length ? refs.map(line).join("\n") : "  (none)";
+    return text(
+      `Connections for ${args.context}/${args.item}:\n\n` +
+        `Links to:\n${fmt(c.outbound)}\n\n` +
+        `Linked from:\n${fmt(c.backlinks)}\n\n` +
+        `Related:\n${fmt(c.related)}`
+    );
+  }
+);
+
+server.registerTool(
+  "get_graph",
+  {
+    description:
+      "Summarize the whole context graph — items as nodes (with connection degree) and the link/related edges between them.",
+    inputSchema: GetGraphArgsSchema.shape,
+  },
+  async () => {
+    const g = await graph.getGraph();
+    const linkCount = g.edges.filter((e) => e.kind === "link").length;
+    const nodes = g.nodes.slice().sort((a, b) => b.degree - a.degree);
+    const nodeLines = nodes
+      .slice(0, 100)
+      .map((n) => `  - ${n.id} (deg ${n.degree}) — ${n.title}`)
+      .join("\n");
+    const edgeLines = g.edges
+      .slice(0, 200)
+      .map((e) => `  ${e.source} ${e.kind === "link" ? "->" : "~"} ${e.target}`)
+      .join("\n");
+    return text(
+      `Context graph: ${g.nodes.length} nodes, ${g.edges.length} edges (${linkCount} links, ${g.edges.length - linkCount} related).\n\n` +
+        `Nodes by degree:\n${nodeLines}${g.nodes.length > 100 ? `\n  …and ${g.nodes.length - 100} more` : ""}\n\n` +
+        `Edges (-> link, ~ related):\n${edgeLines}${g.edges.length > 200 ? `\n  …and ${g.edges.length - 200} more` : ""}`
+    );
   }
 );
 

@@ -274,3 +274,10 @@ export const DeleteAttachmentArgsSchema = z.object({
   context: z.string(),
   filename: z.string().describe("Attachment filename including extension, e.g. screenshot-1.png."),
 });
+
+export const GetItemLinksArgsSchema = z.object({
+  context: z.string(),
+  item: z.string().describe("Item base name (without extension)."),
+});
+
+export const GetGraphArgsSchema = z.object({});
