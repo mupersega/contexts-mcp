@@ -74,6 +74,9 @@ function seed(dataDir) {
       "## The Tools And How They Compose Together", "", para, "", para, "",
       "## Setup, Configuration, And A First Run", "", para, "", para, "",
       "## Composability With Other MCP Servers", "", para, "", para, "",
+      "## See Also", "",
+      "The evidence report at [[evidence]] collects screenshots for this project.",
+      "Background lives in [[query-target/findme]] and the [data bits config](/ctx/data-bits/config).", "",
     ].join("\n"),
   );
   write("alpha-notes/scratch.txt", "plain text item, no frontmatter, nothing fancy\n");

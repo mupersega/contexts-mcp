@@ -1,4 +1,5 @@
 import { ContextMetadata, ContextSummary, ItemInfo } from "./types.js";
+import { ItemConnections } from "./graph.js";
 import { SearchResult } from "./search.js";
 import { styles } from "./styles.js";
 
@@ -738,6 +739,7 @@ export function itemViewPage(
   rawMode: boolean = false,
   hasBackup: boolean = false,
   toc: TocEntry[] = [],
+  connections: ItemConnections | null = null,
 ): string {
   const appendSupported =
     !rawMode && (isMarkdown || extension === "txt" || extension === "csv" || extension === "sql");
@@ -773,6 +775,35 @@ export function itemViewPage(
       </nav>`
       : "";
 
+  // Connections panel — right window gutter, mirror of the TOC rail. Backlinks,
+  // outbound links, and semantically-related items (from the context graph).
+  const connGroup = (
+    label: string,
+    refs: { context: string; item: string; title: string }[]
+  ): string =>
+    refs.length
+      ? `<div class="conn-group"><h4>${label}</h4><ul>${refs
+          .map(
+            (r) =>
+              `<li><a href="/ctx/${esc(r.context)}/${esc(r.item)}">${esc(r.title)}</a><span class="conn-ctx">${esc(r.context)}</span></li>`
+          )
+          .join("")}</ul></div>`
+      : "";
+  const hasConns =
+    !rawMode &&
+    !!connections &&
+    (connections.backlinks.length > 0 ||
+      connections.outbound.length > 0 ||
+      connections.related.length > 0);
+  const connectionsHtml = hasConns
+    ? `<nav class="doc-connections" aria-label="Connections">
+        <div class="doc-conn-title">Connections</div>
+        ${connGroup("Linked from", connections!.backlinks)}
+        ${connGroup("Links to", connections!.outbound)}
+        ${connGroup("Related", connections!.related)}
+      </nav>`
+    : "";
+
   return layout(
     title,
     `
@@ -801,6 +832,7 @@ export function itemViewPage(
       ${tocHtml}
       <div class="${contentClass}" id="doc-body">${contentHtml}</div>
     </div>
+    ${connectionsHtml}
     ${appendForm}`
   );
 }

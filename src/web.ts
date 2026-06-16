@@ -6,6 +6,7 @@ import path from "path";
 import { marked } from "marked";
 import * as storage from "./storage.js";
 import { searchContexts } from "./search.js";
+import * as graph from "./graph.js";
 import {
   CONTEXT_META_FILENAME,
   CONTEXT_NAME_REGEX,
@@ -364,6 +365,14 @@ app.get("/ctx/:context/:item", async (req, res) => {
     }
     const fm = item.frontmatter;
     const hasBackup = await storage.hasBackup(context, itemName, item.extension);
+    let connections: graph.ItemConnections | null = null;
+    if (!rawMode) {
+      try {
+        connections = await graph.getItemConnections(context, item.name);
+      } catch {
+        connections = null;
+      }
+    }
     res.send(
       itemViewPage(
         context,
@@ -378,6 +387,7 @@ app.get("/ctx/:context/:item", async (req, res) => {
         rawMode,
         hasBackup,
         toc,
+        connections,
       )
     );
   } catch (err: unknown) {

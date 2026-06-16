@@ -806,6 +806,21 @@ export const styles = `
     :root[data-width="medium"] .doc-toc { display: none; }
     @media (min-width: 1640px) { :root[data-width="medium"] .doc-toc { display: block; } }
     :root[data-width="wide"] .doc-toc { display: none; }
+
+    /* Connections panel — right window gutter, mirror of the TOC rail. */
+    .doc-connections { position: fixed; top: 6rem; right: 1.5rem; width: 14rem; z-index: 5; max-height: calc(100vh - 8rem); overflow-y: auto; font-size: 0.8rem; }
+    @media (max-width: 1320px) { .doc-connections { display: none; } }
+    :root[data-width="medium"] .doc-connections { display: none; }
+    @media (min-width: 1640px) { :root[data-width="medium"] .doc-connections { display: block; } }
+    :root[data-width="wide"] .doc-connections { display: none; }
+    .doc-conn-title { text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.68rem; color: var(--text-dim); margin: 0 0 0.6rem 0; }
+    .doc-connections .conn-group { margin-bottom: 0.9rem; }
+    .doc-connections .conn-group h4 { font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin: 0 0 0.3rem 0; font-weight: 400; }
+    .doc-connections ul { list-style: none; margin: 0; padding: 0; }
+    .doc-connections li { margin: 0 0 0.4rem 0; line-height: 1.25; }
+    .doc-connections li a { color: var(--text-muted); text-decoration: none; overflow-wrap: anywhere; }
+    .doc-connections li a:hover { color: var(--text-bright); }
+    .doc-connections .conn-ctx { display: block; font-size: 0.6rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
     .doc-toc-title { text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.68rem; color: var(--text-dim); margin: 0 0 0.5rem 0.85rem; }
     .doc-toc ul { list-style: none; margin: 0; padding: 0; border-left: 1px solid var(--border); }
     .doc-toc li a { display: block; padding: 0.25rem 0.6rem 0.25rem 0.85rem; margin-left: -1px; border-left: 2px solid transparent; color: var(--text-muted); text-decoration: none; line-height: 1.3; overflow-wrap: anywhere; }

@@ -38,7 +38,7 @@ Make the pile of context items navigable as a connected knowledge graph, three w
 ## Phases
 
 - [x] **A — graph engine** (`graph.ts`): parse links, forward/backlinks, TF-IDF similarity + sanity tests. **DONE** (11/11 sanity).
-- [ ] **B — connections panel** (right gutter) + `[[wiki-link]]` rendering.
+- [~] **B — connections panel** (right gutter) **DONE & browser-verified** (mirror of the TOC; Links-to / Linked-from / Related from `getItemConnections`). `[[wiki-link]]` inline rendering still TODO (next unit).
 - [ ] **C — `/graph` node-map page** (custom canvas), browser-verified.
 - [ ] **D — optional Ollama embeddings backend** (flagged, fallback-safe).
 - [ ] **E — MCP tools** for agents to traverse the graph.
@@ -46,4 +46,5 @@ Make the pile of context items navigable as a connected knowledge graph, three w
 ## Progress log
 
 - (init) Branch created, design committed. Starting Phase A.
+- iter 2 (~01:1x): **Connections panel done.** Right-gutter `nav.doc-connections` on the item view (mirror of the left TOC) showing Linked-from / Links-to / Related from `graph.getItemConnections`; wired into the web.ts item route; CSS mirrors `.doc-toc`; empty groups omitted. Seeded sandbox cross-links (readme → evidence / query-target/findme / data-bits/config). Build + sanity green; browser-verified at 1500x900 (panel right-gutter, left=1244, clear of content right=1156; TOC still left). Committed. **Next: `[[wiki-link]]` inline rendering** (post-process rendered md, skip code blocks, resolve to `/ctx/...` anchors). Known bug: none.
 - iter 1 (2026-06-17 00:52–01:0x): **Phase A done.** `src/graph.ts` (parseLinks for md `/ctx/..` + `[[wiki]]` links with regex validation that rejects traversal; TF-IDF cosine `tfidfRelated`; `buildGraph` → nodes per item + explicit/related edges + backlinks; cached `getGraph`/`getItemConnections`). `storage.getAllItemsContent()` reads the corpus. 3 new sanity checks pass (parse, tfidf grouping, end-to-end backlinks). Build + sanity green. Committed. **Next: Phase B** — connections panel in the right gutter on the item view + `[[wiki-link]]` rendering in the markdown pipeline.
