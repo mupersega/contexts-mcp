@@ -93,6 +93,35 @@ function parseTags(raw: unknown): string[] {
     .filter(Boolean);
 }
 
+// Rewrite markdown <img> tags that point at non-image attachments into the
+// right element: video/audio get native players, PDFs a link. Image references
+// (png/jpg/...) are left as <img> and resolve to the assets route. src/alt come
+// from marked's already-escaped output, so re-emitting them is safe.
+function embedMediaTags(html: string): string {
+  const videoExt = /\.(mp4|webm|mov|ogg)(?:[?#].*)?$/i;
+  const audioExt = /\.(mp3|wav)(?:[?#].*)?$/i;
+  const pdfExt = /\.pdf(?:[?#].*)?$/i;
+  return html.replace(/<img\b[^>]*>/g, (tag) => {
+    const srcM = /\bsrc="([^"]*)"/.exec(tag);
+    if (!srcM) return tag;
+    const src = srcM[1];
+    const altM = /\balt="([^"]*)"/.exec(tag);
+    const alt = altM ? altM[1] : "";
+    const aria = alt ? ` aria-label="${alt}"` : "";
+    if (videoExt.test(src)) {
+      return `<video src="${src}" controls preload="metadata" class="doc-media"${aria}></video>`;
+    }
+    if (audioExt.test(src)) {
+      return `<audio src="${src}" controls preload="metadata" class="doc-media"${aria}></audio>`;
+    }
+    if (pdfExt.test(src)) {
+      const label = alt || src.split("/").pop() || "PDF";
+      return `<a class="doc-attachment" href="${src}" target="_blank" rel="noopener">${label}</a>`;
+    }
+    return tag;
+  });
+}
+
 // --- Context routes ---
 
 app.get("/", async (req, res) => {
@@ -299,6 +328,20 @@ app.get("/ctx/:context/:item/raw", async (req, res) => {
   }
 });
 
+// --- Attachment serving (static binary files from a context's assets/ folder) ---
+app.get("/ctx/:context/assets/:filename", (req, res) => {
+  let filePath: string;
+  try {
+    filePath = storage.attachmentFilePath(req.params.context, req.params.filename);
+  } catch (err: unknown) {
+    res.status(404).send(escHtml(err instanceof Error ? err.message : String(err)));
+    return;
+  }
+  res.sendFile(filePath, (err) => {
+    if (err && !res.headersSent) res.status(404).send("Attachment not found");
+  });
+});
+
 app.get("/ctx/:context/:item", async (req, res) => {
   try {
     const { context, item: itemName } = req.params;
@@ -314,7 +357,7 @@ app.get("/ctx/:context/:item", async (req, res) => {
       contentHtml = escHtml(rawItem.content);
     } else if (isMarkdown) {
       const anchored = anchorHeadings(await marked.parse(item.content));
-      contentHtml = anchored.html;
+      contentHtml = embedMediaTags(anchored.html);
       toc = anchored.toc;
     } else {
       contentHtml = escHtml(item.content);

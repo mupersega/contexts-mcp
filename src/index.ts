@@ -18,6 +18,9 @@ import {
   SearchContextsArgsSchema,
   ContextDiagnoseArgsSchema,
   GetGuideArgsSchema,
+  AddAttachmentArgsSchema,
+  ListAttachmentsArgsSchema,
+  DeleteAttachmentArgsSchema,
 } from "./types.js";
 import * as storage from "./storage.js";
 import { searchContexts } from "./search.js";
@@ -349,6 +352,49 @@ server.registerTool(
   async (args) => {
     await storage.appendToItem(args.context, args.item, args.content, args.extension);
     return text(`Content appended to '${args.item}'.`);
+  }
+);
+
+server.registerTool(
+  "add_attachment",
+  {
+    description:
+      "Copy a local file (image/video/audio/pdf) into a context's assets/ folder as an attachment, then reference it from markdown with ![alt](assets/<filename>). Ideal for an agent saving screenshots, webm recordings, or reports into a durable context.",
+    inputSchema: AddAttachmentArgsSchema.shape,
+  },
+  async (args) => {
+    const info = await storage.addAttachment(args.context, args.source_path, args.name);
+    return text(
+      `Attachment '${info.filename}' added to '${args.context}' (${info.size} bytes).\n` +
+        `Embed in a markdown item: ![${info.filename}](assets/${info.filename})`
+    );
+  }
+);
+
+server.registerTool(
+  "list_attachments",
+  {
+    description: "List the attachments stored in a context's assets/ folder.",
+    inputSchema: ListAttachmentsArgsSchema.shape,
+  },
+  async (args) => {
+    const list = await storage.listAttachments(args.context);
+    if (!list.length) return text(`No attachments in '${args.context}'.`);
+    return text(
+      list.map((a) => `${a.filename}  (${a.size} bytes, updated ${a.updated})`).join("\n")
+    );
+  }
+);
+
+server.registerTool(
+  "delete_attachment",
+  {
+    description: "Delete an attachment from a context's assets/ folder. Destructive.",
+    inputSchema: DeleteAttachmentArgsSchema.shape,
+  },
+  async (args) => {
+    await storage.deleteAttachment(args.context, args.filename);
+    return text(`Attachment '${args.filename}' deleted from '${args.context}'.`);
   }
 );
 

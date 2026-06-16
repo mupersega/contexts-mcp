@@ -130,6 +130,35 @@ async function run() {
     assertEq(raw.contentType, "application/sql; charset=utf-8", "mime");
   });
 
+  await check("attachments: add/list/dedup, traversal-guard, not-an-item, delete", async () => {
+    await storage.createContext("eviden");
+    const srcPng = path.join(tmpRoot, "src-shot.png");
+    fs.writeFileSync(srcPng, Buffer.from("89504e470d0a1a0a0000", "hex"));
+    const info = await storage.addAttachment("eviden", srcPng, "shot");
+    assertEq(info.filename, "shot.png", "attachment filename");
+    if (info.size <= 0) throw new Error("attachment size should be > 0");
+    assertEq((await storage.listAttachments("eviden")).map((a) => a.filename), ["shot.png"], "list after add");
+    // same name dedups rather than clobbering
+    const info2 = await storage.addAttachment("eviden", srcPng, "shot");
+    assertEq(info2.filename, "shot-1.png", "dedup filename");
+    // unsupported extension rejected
+    const srcExe = path.join(tmpRoot, "evil.exe");
+    fs.writeFileSync(srcExe, "x");
+    let rejectedExt = false;
+    try { await storage.addAttachment("eviden", srcExe); } catch { rejectedExt = true; }
+    if (!rejectedExt) throw new Error("unsupported extension should be rejected");
+    // path traversal rejected at the resolve boundary
+    let rejectedTraversal = false;
+    try { storage.attachmentFilePath("eviden", "../../secret.png"); } catch { rejectedTraversal = true; }
+    if (!rejectedTraversal) throw new Error("traversal filename should be rejected");
+    // assets dir must NOT surface as an item
+    if ((await storage.listItems("eviden")).some((i) => i.name === "assets")) {
+      throw new Error("assets dir leaked into items");
+    }
+    await storage.deleteAttachment("eviden", "shot.png");
+    assertEq((await storage.listAttachments("eviden")).map((a) => a.filename), ["shot-1.png"], "list after delete");
+  });
+
   console.log("");
   if (failed > 0) {
     console.error(`${failed} check(s) failed`);

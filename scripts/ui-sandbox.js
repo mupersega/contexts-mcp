@@ -84,6 +84,26 @@ function seed(dataDir) {
   // A search target with a distinctive token, for exercising full-text search.
   write("query-target/_context.yaml", ["title: Query Target", "status: active", "tags: [search]", ""].join("\n"));
   write("query-target/findme.md", ["---", "title: Find Me", "---", "", "The magic token is ZEBRAFISH and it appears exactly once.", ""].join("\n"));
+
+  // Binary attachments in alpha-notes/assets, plus a markdown report embedding
+  // them — exercises the assets serve route and the markdown media-embed.
+  const assets = path.join(dataDir, "alpha-notes", "assets");
+  fs.mkdirSync(assets, { recursive: true });
+  // a real 1x1 transparent PNG
+  fs.writeFileSync(
+    path.join(assets, "pixel.png"),
+    Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64"),
+  );
+  // a webm placeholder (just the EBML signature — enough to serve + embed)
+  fs.writeFileSync(path.join(assets, "demo.webm"), Buffer.from("1a45dfa3", "hex"));
+  write(
+    "alpha-notes/evidence.md",
+    [
+      "---", "title: Evidence Report", "tags: [evidence]", "---", "",
+      "# Evidence", "", "A screenshot from the run:", "", "![pixel](assets/pixel.png)", "",
+      "A recording of the flow:", "", "![demo](assets/demo.webm)", "",
+    ].join("\n"),
+  );
 }
 
 async function main() {
