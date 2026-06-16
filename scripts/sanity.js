@@ -222,6 +222,40 @@ async function run() {
     graph.invalidateGraphCache();
   });
 
+  await check("graph: related edges are undirected and deduped (one per pair)", async () => {
+    await storage.createContext("grel");
+    await storage.createItem("grel", "db1", "md", { content: "database schema migration postgres index query table tuning" });
+    await storage.createItem("grel", "db2", "md", { content: "postgres database index query table migration schema performance" });
+    graph.invalidateGraphCache();
+    const g = await graph.getGraph();
+    const pair = g.edges.filter(
+      (e) =>
+        e.kind === "related" &&
+        ((e.source === "grel/db1" && e.target === "grel/db2") ||
+          (e.source === "grel/db2" && e.target === "grel/db1"))
+    );
+    if (pair.length !== 1) throw new Error(`expected exactly 1 related edge for db1/db2, got ${pair.length}`);
+    graph.invalidateGraphCache();
+  });
+
+  await check("graph: an explicit link suppresses the related edge for the same pair", async () => {
+    await storage.createContext("gsup");
+    await storage.createItem("gsup", "a", "md", { content: "database schema migration postgres index. See [[gsup/b]]." });
+    await storage.createItem("gsup", "b", "md", { content: "database schema migration postgres index query table." });
+    graph.invalidateGraphCache();
+    const g = await graph.getGraph();
+    if (!g.edges.some((e) => e.kind === "link" && e.source === "gsup/a" && e.target === "gsup/b")) {
+      throw new Error("expected explicit link a -> b");
+    }
+    const related = g.edges.some(
+      (e) =>
+        e.kind === "related" &&
+        ((e.source === "gsup/a" && e.target === "gsup/b") || (e.source === "gsup/b" && e.target === "gsup/a"))
+    );
+    if (related) throw new Error("related edge should be suppressed when an explicit link exists");
+    graph.invalidateGraphCache();
+  });
+
   console.log("");
   if (failed > 0) {
     console.error(`${failed} check(s) failed`);
