@@ -830,6 +830,9 @@ export const styles = `
     .graph-legend { margin-top: 0.6rem; font-size: 0.68rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; }
     .graph-legend .lg-link { color: var(--text-muted); margin-right: 1.2rem; }
     .graph-legend .lg-rel { color: var(--text-dim); }
+    .graph-ctx-legend { margin-top: 0.4rem; display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; font-size: 0.62rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .graph-ctx-legend .cl-ctx { display: inline-flex; align-items: center; gap: 0.3rem; }
+    .graph-ctx-legend .cl-ctx i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
     .doc-toc-title { text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.68rem; color: var(--text-dim); margin: 0 0 0.5rem 0.85rem; }
     .doc-toc ul { list-style: none; margin: 0; padding: 0; border-left: 1px solid var(--border); }
     .doc-toc li a { display: block; padding: 0.25rem 0.6rem 0.25rem 0.85rem; margin-left: -1px; border-left: 2px solid transparent; color: var(--text-muted); text-decoration: none; line-height: 1.3; overflow-wrap: anywhere; }

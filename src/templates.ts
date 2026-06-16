@@ -861,7 +861,7 @@ const GRAPH_SCRIPT = `
   function v(name, fb){ var x = cs.getPropertyValue(name).trim(); return x || fb; }
   var ACCENT = v('--accent','#4ade80'), MUTED = v('--text-muted','#7d8491'),
       DIM = v('--text-dim','#5a6070'), BRIGHT = v('--text-bright','#e6e8ec');
-  var nodes = [], edges = [], byId = {}, hover = null, drag = null, moved = false;
+  var nodes = [], edges = [], byId = {}, colorOf = {}, hover = null, drag = null, moved = false;
   function nodeR(n){ return 4 + Math.min(11, n.degree * 1.6); }
 
   resize();
@@ -875,6 +875,12 @@ const GRAPH_SCRIPT = `
         vx:0, vy:0, fixed:false };
     });
     nodes.forEach(function(n){ byId[n.id]=n; });
+    var ctxs = [];
+    nodes.forEach(function(n){ if (ctxs.indexOf(n.context) < 0) ctxs.push(n.context); });
+    ctxs.sort();
+    ctxs.forEach(function(c,k){ colorOf[c] = 'hsl(' + Math.round(k*360/Math.max(1,ctxs.length)) + ',55%,62%)'; });
+    var leg = document.getElementById('graph-ctx-legend');
+    if (leg){ leg.innerHTML = ctxs.map(function(c){ return '<span class="cl-ctx"><i style="background:'+colorOf[c]+'"></i>'+c.replace(/[<>&"]/g,'')+'</span>'; }).join(''); }
     edges = (g.edges||[]).filter(function(e){ return ok[e.source] && ok[e.target]; })
       .map(function(e){ return { s:byId[e.source], t:byId[e.target], kind:e.kind }; });
     requestAnimationFrame(loop);
@@ -916,8 +922,8 @@ const GRAPH_SCRIPT = `
     for (var i=0;i<nodes.length;i++){
       var n=nodes[i], r=nodeR(n);
       ctx.beginPath(); ctx.arc(n.x,n.y,r,0,Math.PI*2);
-      ctx.fillStyle = (n===hover)?BRIGHT:ACCENT; ctx.fill();
-      if (n===hover){ ctx.lineWidth=1.5; ctx.strokeStyle=ACCENT; ctx.stroke(); }
+      ctx.fillStyle = (n===hover)?BRIGHT:(colorOf[n.context]||ACCENT); ctx.fill();
+      if (n===hover){ ctx.lineWidth=1.5; ctx.strokeStyle=(colorOf[n.context]||ACCENT); ctx.stroke(); }
     }
     ctx.font='10px "IBM Plex Mono", monospace'; ctx.textAlign='left'; ctx.textBaseline='middle';
     for (var l=0;l<nodes.length;l++){
@@ -961,6 +967,7 @@ export function graphPage(): string {
       <div id="graph-empty" class="empty" style="display:none;">No items to graph yet.</div>
     </div>
     <div class="graph-legend"><span class="lg-link">&mdash; linked</span><span class="lg-rel">&middot;&middot;&middot; related</span></div>
+    <div id="graph-ctx-legend" class="graph-ctx-legend"></div>
     <script>${GRAPH_SCRIPT}</script>`
   );
 }
