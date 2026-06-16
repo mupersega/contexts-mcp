@@ -120,6 +120,37 @@ export function layout(title: string, body: string): string {
   </div>
   <script>
   (function() {
+    // Surface server error bodies into a shared #flash region. htmx 2.x drops
+    // 4xx/5xx responses by default (swap:false), so without this a rejected
+    // action (e.g. reverting an item whose backup is already gone) gives the
+    // user no visible feedback at all.
+    function flashRegion() {
+      var el = document.getElementById('flash');
+      if (el) return el;
+      el = document.createElement('div');
+      el.id = 'flash';
+      el.setAttribute('aria-live', 'polite');
+      var header = document.querySelector('.container > header');
+      if (header && header.parentNode) header.parentNode.insertBefore(el, header.nextSibling);
+      else document.body.insertBefore(el, document.body.firstChild);
+      return el;
+    }
+    document.body.addEventListener('htmx:beforeSwap', function(evt) {
+      var d = evt.detail;
+      // Forms that render their own inline error opt out via data-flash="off".
+      if (d.elt && d.elt.getAttribute && d.elt.getAttribute('data-flash') === 'off') return;
+      if (d.isError && d.xhr && d.xhr.responseText) {
+        d.shouldSwap = true;
+        d.isError = false;
+        d.target = flashRegion();
+        d.swapOverride = 'innerHTML';
+      } else if (!d.isError) {
+        var prev = document.getElementById('flash');
+        if (prev && d.target !== prev) prev.innerHTML = '';
+      }
+    });
+  })();
+  (function() {
     var c = document.getElementById('noise-canvas');
     if (!c) return;
     var ctx = c.getContext('2d');
@@ -429,7 +460,7 @@ export function contextListPage(
     <div class="card" style="margin-top:2rem;">
       <h3>New Context</h3>
       <div id="new-ctx-error"></div>
-      <form hx-post="/ctx" hx-swap="none" hx-on::after-request="var slot=document.getElementById('new-ctx-error');if(event.detail.successful){this.reset();slot.innerHTML='';htmx.ajax('GET',location.pathname+location.search,{target:'#context-list-region',swap:'outerHTML'});}else{slot.innerHTML=event.detail.xhr.responseText;}">
+      <form hx-post="/ctx" hx-swap="none" data-flash="off" hx-on::after-request="var slot=document.getElementById('new-ctx-error');if(event.detail.successful){this.reset();slot.innerHTML='';htmx.ajax('GET',location.pathname+location.search,{target:'#context-list-region',swap:'outerHTML'});}else{slot.innerHTML=event.detail.xhr.responseText;}">
         <label for="name">Name</label>
         <input type="text" id="name" name="name" pattern="[a-zA-Z0-9_-]+" required placeholder="my-project">
         <button type="submit" class="btn btn-primary">Create</button>
