@@ -804,6 +804,16 @@ export function itemViewPage(
         ${connGroup("Related", connections!.related)}
       </nav>`
     : "";
+  // Inline fallback shown (via CSS) only when the right-gutter panel is hidden
+  // (narrow windows / wide content mode) so connections are never lost.
+  const connectionsInlineHtml = hasConns
+    ? `<div class="doc-connections-inline">
+        <h3>Connections</h3>
+        ${connGroup("Linked from", connections!.backlinks)}
+        ${connGroup("Links to", connections!.outbound)}
+        ${connGroup("Related", connections!.related)}
+      </div>`
+    : "";
 
   return layout(
     title,
@@ -834,6 +844,7 @@ export function itemViewPage(
       <div class="${contentClass}" id="doc-body">${contentHtml}</div>
     </div>
     ${connectionsHtml}
+    ${connectionsInlineHtml}
     ${appendForm}`
   );
 }

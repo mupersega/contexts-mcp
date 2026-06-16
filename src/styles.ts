@@ -822,6 +822,23 @@ export const styles = `
     .doc-connections li a:hover { color: var(--text-bright); }
     .doc-connections .conn-ctx { display: block; font-size: 0.6rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
 
+    /* Inline connections fallback — shown ONLY when the gutter panel is hidden
+       (inverse of the .doc-connections breakpoints), so connections survive on
+       narrow windows and in wide content mode. */
+    .doc-connections-inline { display: none; margin-top: 2rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+    @media (max-width: 1320px) { .doc-connections-inline { display: block; } }
+    :root[data-width="medium"] .doc-connections-inline { display: block; }
+    @media (min-width: 1640px) { :root[data-width="medium"] .doc-connections-inline { display: none; } }
+    :root[data-width="wide"] .doc-connections-inline { display: block; }
+    .doc-connections-inline h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); margin: 0 0 0.75rem 0; }
+    .doc-connections-inline .conn-group { margin-bottom: 0.75rem; }
+    .doc-connections-inline .conn-group h4 { font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin: 0 0 0.3rem 0; font-weight: 400; }
+    .doc-connections-inline ul { list-style: none; margin: 0; padding: 0; }
+    .doc-connections-inline li { margin: 0 0 0.3rem 0; }
+    .doc-connections-inline li a { color: var(--text-muted); text-decoration: none; }
+    .doc-connections-inline li a:hover { color: var(--text-bright); }
+    .doc-connections-inline .conn-ctx { color: var(--text-dim); font-size: 0.7rem; margin-left: 0.5rem; }
+
     /* Context graph page */
     #graph-wrap { position: relative; margin-top: 1rem; border: 1px solid var(--border); background: var(--bg); overflow: hidden; }
     #graph-canvas { display: block; width: 100%; cursor: default; }
