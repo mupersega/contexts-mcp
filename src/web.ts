@@ -29,6 +29,7 @@ import {
   itemEditPage,
   searchPage,
   themeLabPage,
+  graphPage,
   anchorHeadings,
   TocEntry,
 } from "./templates.js";
@@ -567,6 +568,18 @@ app.get("/diagnose", async (_req, res) => {
 // Purely client-side state — no params, no persistence here. The page
 // renders the same HTML for everyone; the inline script reads localStorage
 // and applies data-* attributes to <html>.
+app.get("/graph", (_req, res) => {
+  res.send(graphPage());
+});
+
+app.get("/graph.json", async (_req, res) => {
+  try {
+    res.json(await graph.getGraph());
+  } catch (err: unknown) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 app.get("/theme", (_req, res) => {
   res.send(themeLabPage());
 });

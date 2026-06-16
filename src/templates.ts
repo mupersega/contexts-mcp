@@ -148,6 +148,7 @@ export function layout(title: string, body: string): string {
       <nav>
         <a href="/">All Contexts</a>
         <a href="/search">Search</a>
+        <a href="/graph">Graph</a>
       </nav>
     </header>
     ${body}
@@ -834,6 +835,133 @@ export function itemViewPage(
     </div>
     ${connectionsHtml}
     ${appendForm}`
+  );
+}
+
+// Self-contained vanilla-canvas force-directed graph. No deps. Reads /graph.json,
+// simulates repulsion + edge springs + gravity, draws nodes (sized by degree) and
+// edges (solid = explicit link, dashed = semantically related), supports drag and
+// click-to-open. Colours pulled from the live CRT theme variables.
+const GRAPH_SCRIPT = `
+(function(){
+  var canvas = document.getElementById('graph-canvas');
+  if (!canvas || !canvas.getContext) return;
+  var ctx = canvas.getContext('2d');
+  var wrap = document.getElementById('graph-wrap');
+  var empty = document.getElementById('graph-empty');
+  var DPR = Math.min(window.devicePixelRatio || 1, 2);
+  var W = 800, H = 480;
+  function resize(){
+    W = wrap.clientWidth || 800; H = Math.max(420, Math.round(window.innerHeight * 0.62));
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  var cs = getComputedStyle(document.documentElement);
+  function v(name, fb){ var x = cs.getPropertyValue(name).trim(); return x || fb; }
+  var ACCENT = v('--accent','#4ade80'), MUTED = v('--text-muted','#7d8491'),
+      DIM = v('--text-dim','#5a6070'), BRIGHT = v('--text-bright','#e6e8ec');
+  var nodes = [], edges = [], byId = {}, hover = null, drag = null, moved = false;
+  function nodeR(n){ return 4 + Math.min(11, n.degree * 1.6); }
+
+  resize();
+  fetch('/graph.json').then(function(r){ return r.json(); }).then(function(g){
+    if (!g.nodes || !g.nodes.length){ if(empty) empty.style.display='block'; return; }
+    var ns = g.nodes.slice().sort(function(a,b){ return b.degree-a.degree; }).slice(0, 200);
+    var ok = {}; ns.forEach(function(n){ ok[n.id]=true; });
+    nodes = ns.map(function(n,i){
+      return { id:n.id, label:(n.title||n.item), context:n.context, item:n.item, degree:n.degree,
+        x: W/2 + Math.cos(i*2.4)*140 + (i%7-3)*16, y: H/2 + Math.sin(i*2.4)*120 + (i%5-2)*16,
+        vx:0, vy:0, fixed:false };
+    });
+    nodes.forEach(function(n){ byId[n.id]=n; });
+    edges = (g.edges||[]).filter(function(e){ return ok[e.source] && ok[e.target]; })
+      .map(function(e){ return { s:byId[e.source], t:byId[e.target], kind:e.kind }; });
+    requestAnimationFrame(loop);
+  }).catch(function(){ if(empty){ empty.textContent='Could not load the graph.'; empty.style.display='block'; } });
+
+  function step(){
+    for (var i=0;i<nodes.length;i++){
+      var a = nodes[i];
+      for (var j=i+1;j<nodes.length;j++){
+        var b = nodes[j];
+        var dx=a.x-b.x, dy=a.y-b.y, d2=dx*dx+dy*dy||0.01, d=Math.sqrt(d2);
+        var f=1500/d2, fx=dx/d*f, fy=dy/d*f;
+        a.vx+=fx; a.vy+=fy; b.vx-=fx; b.vy-=fy;
+      }
+    }
+    for (var e=0;e<edges.length;e++){
+      var ed=edges[e], ex=ed.t.x-ed.s.x, ey=ed.t.y-ed.s.y, el=Math.sqrt(ex*ex+ey*ey)||0.01;
+      var rest = ed.kind==='link'?72:130, k = ed.kind==='link'?0.02:0.008;
+      var ef=(el-rest)*k, efx=ex/el*ef, efy=ey/el*ef;
+      ed.s.vx+=efx; ed.s.vy+=efy; ed.t.vx-=efx; ed.t.vy-=efy;
+    }
+    for (var n=0;n<nodes.length;n++){
+      var p=nodes[n];
+      if (p.fixed){ p.vx=0; p.vy=0; continue; }
+      p.vx += (W/2-p.x)*0.0025; p.vy += (H/2-p.y)*0.0025;
+      p.vx*=0.85; p.vy*=0.85; p.x+=p.vx; p.y+=p.vy;
+      p.x=Math.max(14,Math.min(W-14,p.x)); p.y=Math.max(14,Math.min(H-14,p.y));
+    }
+  }
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    for (var e=0;e<edges.length;e++){
+      var ed=edges[e];
+      ctx.beginPath(); ctx.moveTo(ed.s.x,ed.s.y); ctx.lineTo(ed.t.x,ed.t.y);
+      if (ed.kind==='link'){ ctx.strokeStyle=MUTED; ctx.globalAlpha=0.5; ctx.lineWidth=1; ctx.setLineDash([]); }
+      else { ctx.strokeStyle=DIM; ctx.globalAlpha=0.4; ctx.lineWidth=1; ctx.setLineDash([3,3]); }
+      ctx.stroke(); ctx.globalAlpha=1; ctx.setLineDash([]);
+    }
+    for (var i=0;i<nodes.length;i++){
+      var n=nodes[i], r=nodeR(n);
+      ctx.beginPath(); ctx.arc(n.x,n.y,r,0,Math.PI*2);
+      ctx.fillStyle = (n===hover)?BRIGHT:ACCENT; ctx.fill();
+      if (n===hover){ ctx.lineWidth=1.5; ctx.strokeStyle=ACCENT; ctx.stroke(); }
+    }
+    ctx.font='10px "IBM Plex Mono", monospace'; ctx.textAlign='left'; ctx.textBaseline='middle';
+    for (var l=0;l<nodes.length;l++){
+      var m=nodes[l];
+      if (m===hover || m.degree>=3){
+        ctx.fillStyle = (m===hover)?BRIGHT:MUTED;
+        ctx.fillText(String(m.label).slice(0,28), m.x + nodeR(m) + 5, m.y);
+      }
+    }
+  }
+  var frames=0;
+  function loop(){ step(); draw(); frames++; requestAnimationFrame(loop); }
+
+  function at(mx,my){ for (var i=nodes.length-1;i>=0;i--){ var n=nodes[i],dx=mx-n.x,dy=my-n.y; if (dx*dx+dy*dy<=Math.pow(nodeR(n)+5,2)) return n; } return null; }
+  function pos(ev){ var rc=canvas.getBoundingClientRect(); return { x:ev.clientX-rc.left, y:ev.clientY-rc.top }; }
+  canvas.addEventListener('mousemove', function(ev){
+    var p=pos(ev);
+    if (drag){ drag.x=p.x; drag.y=p.y; drag.fixed=true; moved=true; }
+    else { hover=at(p.x,p.y); canvas.style.cursor=hover?'pointer':'default'; }
+  });
+  canvas.addEventListener('mousedown', function(ev){ var p=pos(ev); drag=at(p.x,p.y); moved=false; });
+  window.addEventListener('mouseup', function(ev){
+    if (!drag) return;
+    var p=pos(ev), n=at(p.x,p.y);
+    if (!moved && n===drag){ window.location.href='/ctx/'+encodeURIComponent(drag.context)+'/'+encodeURIComponent(drag.item); }
+    drag.fixed=false; drag=null;
+  });
+  window.addEventListener('resize', resize);
+})();
+`;
+
+export function graphPage(): string {
+  return layout(
+    "Graph",
+    `
+    <div class="breadcrumb"><a href="/">Contexts</a> / <strong>Graph</strong></div>
+    <h2>Context Graph</h2>
+    <p class="graph-intro">Every item is a node. Solid edges are explicit links; dashed edges are semantically related items. Drag to rearrange, click a node to open it.</p>
+    <div id="graph-wrap">
+      <canvas id="graph-canvas"></canvas>
+      <div id="graph-empty" class="empty" style="display:none;">No items to graph yet.</div>
+    </div>
+    <div class="graph-legend"><span class="lg-link">&mdash; linked</span><span class="lg-rel">&middot;&middot;&middot; related</span></div>
+    <script>${GRAPH_SCRIPT}</script>`
   );
 }
 

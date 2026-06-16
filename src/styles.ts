@@ -821,6 +821,15 @@ export const styles = `
     .doc-connections li a { color: var(--text-muted); text-decoration: none; overflow-wrap: anywhere; }
     .doc-connections li a:hover { color: var(--text-bright); }
     .doc-connections .conn-ctx { display: block; font-size: 0.6rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+
+    /* Context graph page */
+    #graph-wrap { position: relative; margin-top: 1rem; border: 1px solid var(--border); background: var(--bg); overflow: hidden; }
+    #graph-canvas { display: block; width: 100%; cursor: default; }
+    .graph-intro { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.5rem; }
+    #graph-empty { padding: 3rem; text-align: center; }
+    .graph-legend { margin-top: 0.6rem; font-size: 0.68rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; }
+    .graph-legend .lg-link { color: var(--text-muted); margin-right: 1.2rem; }
+    .graph-legend .lg-rel { color: var(--text-dim); }
     .doc-toc-title { text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.68rem; color: var(--text-dim); margin: 0 0 0.5rem 0.85rem; }
     .doc-toc ul { list-style: none; margin: 0; padding: 0; border-left: 1px solid var(--border); }
     .doc-toc li a { display: block; padding: 0.25rem 0.6rem 0.25rem 0.85rem; margin-left: -1px; border-left: 2px solid transparent; color: var(--text-muted); text-decoration: none; line-height: 1.3; overflow-wrap: anywhere; }
