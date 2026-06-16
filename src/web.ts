@@ -580,12 +580,16 @@ app.get("/diagnose", async (_req, res) => {
 // renders the same HTML for everyone; the inline script reads localStorage
 // and applies data-* attributes to <html>.
 app.get("/graph", (req, res) => {
-  res.send(graphPage(parseTruthy(req.query.archived)));
+  const ctx = typeof req.query.ctx === "string" ? req.query.ctx : "";
+  res.send(graphPage(parseTruthy(req.query.archived), ctx));
 });
 
 app.get("/graph.json", async (req, res) => {
   try {
-    res.json(await graph.getGraph(parseTruthy(req.query.archived)));
+    const archived = parseTruthy(req.query.archived);
+    const ctx = typeof req.query.ctx === "string" && req.query.ctx ? req.query.ctx : null;
+    const g = ctx ? await graph.getContextSubgraph(ctx, archived) : await graph.getGraph(archived);
+    res.json(g);
   } catch (err: unknown) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }

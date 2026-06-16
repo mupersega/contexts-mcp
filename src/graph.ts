@@ -352,6 +352,23 @@ export async function getNodeIds(): Promise<Set<string>> {
   return new Set(g.nodes.map((n) => n.id));
 }
 
+// Subgraph scoped to one context: its items plus their direct (1-hop) neighbours,
+// and the edges among the kept nodes. Empty if the context has no items.
+export async function getContextSubgraph(context: string, includeArchived = false): Promise<Graph> {
+  const g = await getGraph(includeArchived);
+  const inCtx = new Set(g.nodes.filter((n) => n.context === context).map((n) => n.id));
+  if (inCtx.size === 0) return { nodes: [], edges: [] };
+  const keep = new Set(inCtx);
+  for (const e of g.edges) {
+    if (inCtx.has(e.source)) keep.add(e.target);
+    if (inCtx.has(e.target)) keep.add(e.source);
+  }
+  return {
+    nodes: g.nodes.filter((n) => keep.has(n.id)),
+    edges: g.edges.filter((e) => keep.has(e.source) && keep.has(e.target)),
+  };
+}
+
 // Connections include archived by default so viewing any item (even an archived
 // one) shows its full link set; the /graph overview excludes archived by default.
 export async function getItemConnections(

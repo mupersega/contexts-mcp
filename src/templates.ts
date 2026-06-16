@@ -700,6 +700,7 @@ export function itemListPage(
     `
     <div class="breadcrumb"><a href="/">Contexts</a> / <strong>${esc(context)}</strong></div>
     ${contextMetaHeader(context, meta)}
+    <div style="margin-top:0.75rem;"><a class="btn btn-sm" href="/graph?ctx=${esc(context)}">View in graph</a></div>
     <div id="item-list" style="margin-top:1rem;">${list}</div>
     <div class="card" style="margin-top:2rem;">
       <h3>New Item</h3>
@@ -980,15 +981,21 @@ const GRAPH_SCRIPT = `
 })();
 `;
 
-export function graphPage(includeArchived = false): string {
+export function graphPage(includeArchived = false, scopeCtx = ""): string {
+  const qstr = (arch: boolean): string => {
+    const parts: string[] = [];
+    if (scopeCtx) parts.push(`ctx=${encodeURIComponent(scopeCtx)}`);
+    if (arch) parts.push("archived=1");
+    return parts.length ? `?${parts.join("&")}` : "";
+  };
   return layout(
     "Graph",
     `
-    <div class="breadcrumb"><a href="/">Contexts</a> / <strong>Graph</strong></div>
-    <h2>Context Graph</h2>
-    <p class="graph-intro">Every item is a node. Solid edges are explicit links; dashed edges are semantically related items. Drag to rearrange, click a node to open it.</p>
+    <div class="breadcrumb"><a href="/">Contexts</a> / <strong>Graph</strong>${scopeCtx ? ` / <span style="color:var(--text-dim);">${esc(scopeCtx)}</span>` : ""}</div>
+    <h2>Context Graph${scopeCtx ? ` &mdash; ${esc(scopeCtx)}` : ""}</h2>
+    <p class="graph-intro">${scopeCtx ? `Items in <strong>${esc(scopeCtx)}</strong> and their direct connections. ` : "Every item is a node. "}Solid edges are explicit links; dashed edges are semantically related items. Drag to rearrange, click a node to open it.${scopeCtx ? ` <a href="/graph${includeArchived ? "?archived=1" : ""}">View full graph</a>.` : ""}</p>
     <input type="text" id="graph-filter" class="graph-filter" placeholder="Filter nodes by title or context…" autocomplete="off">
-    <a class="graph-archived-toggle" href="${includeArchived ? "/graph" : "/graph?archived=1"}">${includeArchived ? "Hide archived" : "Show archived"}</a>
+    <a class="graph-archived-toggle" href="/graph${qstr(!includeArchived)}">${includeArchived ? "Hide archived" : "Show archived"}</a>
     <div id="graph-wrap">
       <canvas id="graph-canvas"></canvas>
       <div id="graph-empty" class="empty" style="display:none;">No items to graph yet.</div>
