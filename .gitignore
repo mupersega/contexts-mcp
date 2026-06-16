@@ -7,3 +7,6 @@ contexts-data/
 
 # Local Claude Code settings (may contain machine-specific paths and secrets)
 .claude/
+
+# Local editor settings (personal Peacock colors, machine-specific)
+.vscode/
