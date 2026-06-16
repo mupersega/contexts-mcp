@@ -37,7 +37,7 @@ Make the pile of context items navigable as a connected knowledge graph, three w
 
 ## Phases
 
-- [ ] **A — graph engine** (`graph.ts`): parse links, forward/backlinks, TF-IDF similarity + sanity tests.
+- [x] **A — graph engine** (`graph.ts`): parse links, forward/backlinks, TF-IDF similarity + sanity tests. **DONE** (11/11 sanity).
 - [ ] **B — connections panel** (right gutter) + `[[wiki-link]]` rendering.
 - [ ] **C — `/graph` node-map page** (custom canvas), browser-verified.
 - [ ] **D — optional Ollama embeddings backend** (flagged, fallback-safe).
@@ -46,3 +46,4 @@ Make the pile of context items navigable as a connected knowledge graph, three w
 ## Progress log
 
 - (init) Branch created, design committed. Starting Phase A.
+- iter 1 (2026-06-17 00:52–01:0x): **Phase A done.** `src/graph.ts` (parseLinks for md `/ctx/..` + `[[wiki]]` links with regex validation that rejects traversal; TF-IDF cosine `tfidfRelated`; `buildGraph` → nodes per item + explicit/related edges + backlinks; cached `getGraph`/`getItemConnections`). `storage.getAllItemsContent()` reads the corpus. 3 new sanity checks pass (parse, tfidf grouping, end-to-end backlinks). Build + sanity green. Committed. **Next: Phase B** — connections panel in the right gutter on the item view + `[[wiki-link]]` rendering in the markdown pipeline.

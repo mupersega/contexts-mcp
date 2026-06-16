@@ -16,6 +16,7 @@ const tmpRoot = path.join(os.tmpdir(), `contexts-mcp-sanity-${process.pid}-${Dat
 process.env.CONTEXTS_DATA_DIR = tmpRoot;
 
 const storage = await import(pathToFileURL(path.join(repoRoot, "dist", "storage.js")).href);
+const graph = await import(pathToFileURL(path.join(repoRoot, "dist", "graph.js")).href);
 
 let failed = 0;
 async function check(label, fn) {
@@ -157,6 +158,45 @@ async function run() {
     }
     await storage.deleteAttachment("eviden", "shot.png");
     assertEq((await storage.listAttachments("eviden")).map((a) => a.filename), ["shot-1.png"], "list after delete");
+  });
+
+  await check("graph: parseLinks detects md + wiki links, rejects invalid/traversal", async () => {
+    const refs = graph.parseLinks(
+      "See [o](/ctx/projx/notes) and [[ideas]] and [[projy/spec]] and [bad](/ctx/..) and [[no spaces]]",
+      "home"
+    );
+    const keys = refs.map((r) => `${r.context}/${r.item ?? ""}`);
+    if (!keys.includes("projx/notes")) throw new Error("missed md internal link");
+    if (!keys.includes("home/ideas")) throw new Error("missed same-context wiki link");
+    if (!keys.includes("projy/spec")) throw new Error("missed cross-context wiki link");
+    if (keys.some((k) => k.includes(".."))) throw new Error("traversal '/ctx/..' was not rejected");
+    if (keys.includes("home/no spaces")) throw new Error("invalid item name not rejected");
+  });
+
+  await check("graph: tfidf groups topically-similar docs", async () => {
+    const docs = [
+      { id: "db1", text: "database schema migration postgres index query table" },
+      { id: "db2", text: "postgres database index query performance table tuning" },
+      { id: "ui1", text: "button layout flexbox component render viewport spacing" },
+    ];
+    const rel = graph.tfidfRelated(docs, 2, 0.0);
+    const top = rel.get("db1")[0];
+    assertEq(top.id, "db2", "db1's nearest neighbour is the other database doc");
+  });
+
+  await check("graph: build yields outbound links + backlinks", async () => {
+    await storage.createContext("gctxa");
+    await storage.createContext("gctxb");
+    await storage.createItem("gctxa", "alpha", "md", {
+      content: "About databases. See [[gctxb/beta]] and [g](/ctx/gctxa/gamma).",
+    });
+    await storage.createItem("gctxb", "beta", "md", { content: "Database indexing and queries." });
+    await storage.createItem("gctxa", "gamma", "md", { content: "Unrelated UI flexbox layout." });
+    graph.invalidateGraphCache();
+    const a = await graph.getItemConnections("gctxa", "alpha");
+    assertEq(a.outbound.map((o) => o.id).sort(), ["gctxa/gamma", "gctxb/beta"], "alpha outbound");
+    const beta = await graph.getItemConnections("gctxb", "beta");
+    assertEq(beta.backlinks.map((b) => b.id), ["gctxa/alpha"], "beta backlink from alpha");
   });
 
   console.log("");

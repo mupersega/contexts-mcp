@@ -555,6 +555,45 @@ export async function deleteAttachment(context: string, filename: string): Promi
   await touchContext(context);
 }
 
+// Read every item's content across all contexts — the corpus the link/similarity
+// graph is built from. Spans everything (including archived). Skips unreadable
+// entries rather than failing the whole build.
+export async function getAllItemsContent(): Promise<
+  { context: string; name: string; extension: ItemExtension; title: string; content: string }[]
+> {
+  const out: {
+    context: string;
+    name: string;
+    extension: ItemExtension;
+    title: string;
+    content: string;
+  }[] = [];
+  const contexts = await listContexts({ includeArchived: true });
+  for (const c of contexts) {
+    let items: ItemInfo[];
+    try {
+      items = await listItems(c.name);
+    } catch {
+      continue;
+    }
+    for (const it of items) {
+      try {
+        const full = await getItem(c.name, it.name, it.extension);
+        out.push({
+          context: c.name,
+          name: it.name,
+          extension: it.extension,
+          title: it.title || it.name,
+          content: full.content,
+        });
+      } catch {
+        /* skip unreadable */
+      }
+    }
+  }
+  return out;
+}
+
 // --- Item operations ---
 
 // Resolve which file on disk a (context, base) refers to. Prefer markdown when
