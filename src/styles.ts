@@ -797,40 +797,41 @@ export const styles = `
     @keyframes stamp-in { 0% { opacity: 0; transform: translateY(-4px); } 100% { opacity: 1; transform: translateY(0); } }
     @keyframes screen-flicker { 0% { opacity: 0.97; } 5% { opacity: 1; } 10% { opacity: 0.98; } 15% { opacity: 1; } 100% { opacity: 1; } }
 
-    /* --- Markdown table of contents (left rail on rendered .md item views) --- */
+    /* --- Markdown table of contents (top-left window gutter) --- */
     .doc-layout { display: block; }
-    /* The table of contents lives in the left WINDOW gutter — fixed, OUTSIDE the
-       centered content column — so it never eats content width and is never
-       clipped by the in-container sticky chrome (header/breadcrumb/title bar).
+    /* Fixed in the top-left window gutter, OUTSIDE the centered content column,
+       so it never eats content width or gets clipped by the sticky chrome.
+       Clean: no rail border — hover just brightens the entry.
        Hidden when the gutter is too small (narrow window or wide content mode). */
     .doc-toc {
-      position: fixed; top: 6rem; left: 1.5rem; width: 13rem; z-index: 5;
-      max-height: calc(100vh - 8rem); overflow-y: auto; font-size: 0.8rem;
+      position: fixed; top: 5.75rem; left: 1.75rem; width: 13rem; z-index: 5;
+      max-height: calc(100vh - 7.5rem); overflow-y: auto; font-size: 0.8rem;
     }
     @media (max-width: 1320px) { .doc-toc { display: none; } }
     :root[data-width="medium"] .doc-toc { display: none; }
     @media (min-width: 1640px) { :root[data-width="medium"] .doc-toc { display: block; } }
     :root[data-width="wide"] .doc-toc { display: none; }
 
-    /* Connections panel — right window gutter, mirror of the TOC rail. */
-    .doc-connections { position: fixed; top: 6rem; right: 1.5rem; width: 14rem; z-index: 5; max-height: calc(100vh - 8rem); overflow-y: auto; font-size: 0.8rem; }
+    /* Connections — bottom-right window gutter, right-aligned to hug the corner.
+       Clean: no borders — hover brightens. Diagonal mirror of the top-left TOC. */
+    .doc-connections { position: fixed; bottom: 2rem; right: 1.75rem; width: 15rem; z-index: 5; max-height: 60vh; overflow-y: auto; font-size: 0.8rem; text-align: right; }
     @media (max-width: 1320px) { .doc-connections { display: none; } }
     :root[data-width="medium"] .doc-connections { display: none; }
     @media (min-width: 1640px) { :root[data-width="medium"] .doc-connections { display: block; } }
     :root[data-width="wide"] .doc-connections { display: none; }
-    .doc-conn-title { text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.68rem; color: var(--text-dim); margin: 0 0 0.6rem 0; }
-    .doc-connections .conn-group { margin-bottom: 0.9rem; }
-    .doc-connections .conn-group h4 { font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin: 0 0 0.3rem 0; font-weight: 400; }
+    .doc-conn-title { text-transform: uppercase; letter-spacing: 0.15em; font-size: 0.62rem; color: var(--text-dim); margin: 0 0 0.6rem 0; }
+    .doc-connections .conn-group { margin-bottom: 0.85rem; }
+    .doc-connections .conn-group h4 { font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin: 0 0 0.3rem 0; font-weight: 400; }
     .doc-connections ul { list-style: none; margin: 0; padding: 0; }
-    .doc-connections li { margin: 0 0 0.75rem 0; }
+    .doc-connections li { margin: 0 0 0.6rem 0; }
     .doc-connections li a { display: block; color: var(--text-muted); text-decoration: none; border-bottom: none; line-height: 1.3; overflow-wrap: anywhere; }
     .doc-connections li a:hover { color: var(--text-bright); }
-    .doc-connections .conn-ctx { display: block; font-size: 0.6rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.15rem; }
+    .doc-connections .conn-ctx { display: block; font-size: 0.58rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.1rem; }
 
     /* Inline connections fallback — shown ONLY when the gutter panel is hidden
        (inverse of the .doc-connections breakpoints), so connections survive on
        narrow windows and in wide content mode. */
-    .doc-connections-inline { display: none; margin-top: 2rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+    .doc-connections-inline { display: none; margin-top: 2.5rem; padding-top: 0.5rem; }
     @media (max-width: 1320px) { .doc-connections-inline { display: block; } }
     :root[data-width="medium"] .doc-connections-inline { display: block; }
     @media (min-width: 1640px) { :root[data-width="medium"] .doc-connections-inline { display: none; } }
@@ -860,13 +861,13 @@ export const styles = `
     .graph-ctx-legend { margin-top: 0.4rem; display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; font-size: 0.62rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
     .graph-ctx-legend .cl-ctx { display: inline-flex; align-items: center; gap: 0.3rem; }
     .graph-ctx-legend .cl-ctx i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-    .doc-toc-title { text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.68rem; color: var(--text-dim); margin: 0 0 0.5rem 0.85rem; }
-    .doc-toc ul { list-style: none; margin: 0; padding: 0; border-left: 1px solid var(--border); }
-    .doc-toc li a { display: block; padding: 0.25rem 0.6rem 0.25rem 0.85rem; margin-left: -1px; border-left: 2px solid transparent; border-bottom: none; color: var(--text-muted); text-decoration: none; line-height: 1.3; overflow-wrap: anywhere; }
-    .doc-toc li a:hover { color: var(--text-bright); border-left-color: var(--accent); }
-    .doc-toc .toc-l2 a { padding-left: 1.5rem; }
-    .doc-toc .toc-l3 a { padding-left: 2.15rem; }
-    .doc-toc .toc-l4 a, .doc-toc .toc-l5 a, .doc-toc .toc-l6 a { padding-left: 2.8rem; }
+    .doc-toc-title { text-transform: uppercase; letter-spacing: 0.15em; font-size: 0.62rem; color: var(--text-dim); margin: 0 0 0.7rem 0; }
+    .doc-toc ul { list-style: none; margin: 0; padding: 0; }
+    .doc-toc li a { display: block; padding: 0.22rem 0; border-bottom: none; color: var(--text-dim); text-decoration: none; line-height: 1.35; overflow-wrap: anywhere; transition: color 120ms; }
+    .doc-toc li a:hover { color: var(--text-bright); }
+    .doc-toc .toc-l2 a { padding-left: 0.9rem; }
+    .doc-toc .toc-l3 a { padding-left: 1.7rem; }
+    .doc-toc .toc-l4 a, .doc-toc .toc-l5 a, .doc-toc .toc-l6 a { padding-left: 2.4rem; }
     .doc-content h1, .doc-content h2, .doc-content h3, .doc-content h4, .doc-content h5, .doc-content h6 { scroll-margin-top: 15rem; }
 
     /* --- Embedded markdown media (attachments from assets/) --- */
