@@ -78,6 +78,8 @@ function seed(dataDir) {
       "The evidence report at [[evidence]] collects screenshots for this project.",
       "Background lives in [[query-target/findme]] and the [data bits config](/ctx/data-bits/config).",
       "Planned but not yet written: [[future-notes]].", "",
+      "## Checklist", "",
+      "- [x] First task is done", "- [ ] Second task is pending", "- [x] Third task is done", "- [ ] Fourth task is pending", "",
     ].join("\n"),
   );
   write("alpha-notes/scratch.txt", "plain text item, no frontmatter, nothing fancy\n");
@@ -109,7 +111,7 @@ function seed(dataDir) {
   write(
     "alpha-notes/evidence.md",
     [
-      "---", "title: Evidence Report", "tags: [evidence]", "---", "",
+      "---", "title: Evidence Report — Screenshots, Recordings, And Everything The Testing Agent Gathered", "tags: [evidence]", "---", "",
       "# Evidence", "", "A screenshot from the run:", "", "![pixel](assets/pixel.png)", "",
       "A recording of the flow:", "", "![demo](assets/demo.webm)", "",
     ].join("\n"),

@@ -794,7 +794,7 @@ export function itemViewPage(
       ? `<div class="conn-group"><h4>${label}</h4><ul>${refs
           .map(
             (r) =>
-              `<li><a href="/ctx/${esc(r.context)}/${esc(r.item)}">${esc(r.title)}</a><span class="conn-ctx">${esc(r.context)}</span></li>`
+              `<li><a href="/ctx/${esc(r.context)}/${esc(r.item)}" title="${esc(r.title)}">${esc(r.title)}</a><span class="conn-ctx">${esc(r.context)}</span></li>`
           )
           .join("")}</ul></div>`
       : "";

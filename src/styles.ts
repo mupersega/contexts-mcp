@@ -626,6 +626,11 @@ export const styles = `
       border: none; background: none; padding: 0; color: var(--text-bright);
     }
     .doc-content ul, .doc-content ol { padding-left: 1.5rem; margin-bottom: 0.75rem; }
+    /* GFM task lists ([ ] / [x]): the global input rule above stretches the
+       checkbox to full width; restore a normal inline checkbox and drop the
+       list bullet on items that contain one. */
+    .doc-content input[type="checkbox"] { width: auto; height: auto; margin: 0 0.5rem 0 0; padding: 0; border: none; background: none; vertical-align: middle; -webkit-appearance: auto; appearance: auto; accent-color: var(--accent); cursor: default; }
+    .doc-content li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.2rem; }
     .doc-content blockquote {
       padding: 0.75rem 1rem; margin: 1rem 0;
       background: var(--code-bg); border: 1px dotted var(--border);
@@ -817,10 +822,10 @@ export const styles = `
     .doc-connections .conn-group { margin-bottom: 0.9rem; }
     .doc-connections .conn-group h4 { font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin: 0 0 0.3rem 0; font-weight: 400; }
     .doc-connections ul { list-style: none; margin: 0; padding: 0; }
-    .doc-connections li { margin: 0 0 0.4rem 0; line-height: 1.25; }
-    .doc-connections li a { color: var(--text-muted); text-decoration: none; overflow-wrap: anywhere; }
+    .doc-connections li { margin: 0 0 0.75rem 0; }
+    .doc-connections li a { display: block; color: var(--text-muted); text-decoration: none; border-bottom: none; line-height: 1.3; overflow-wrap: anywhere; }
     .doc-connections li a:hover { color: var(--text-bright); }
-    .doc-connections .conn-ctx { display: block; font-size: 0.6rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+    .doc-connections .conn-ctx { display: block; font-size: 0.6rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.15rem; }
 
     /* Inline connections fallback — shown ONLY when the gutter panel is hidden
        (inverse of the .doc-connections breakpoints), so connections survive on
@@ -835,7 +840,7 @@ export const styles = `
     .doc-connections-inline .conn-group h4 { font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin: 0 0 0.3rem 0; font-weight: 400; }
     .doc-connections-inline ul { list-style: none; margin: 0; padding: 0; }
     .doc-connections-inline li { margin: 0 0 0.3rem 0; }
-    .doc-connections-inline li a { color: var(--text-muted); text-decoration: none; }
+    .doc-connections-inline li a { color: var(--text-muted); text-decoration: none; border-bottom: none; }
     .doc-connections-inline li a:hover { color: var(--text-bright); }
     .doc-connections-inline .conn-ctx { color: var(--text-dim); font-size: 0.7rem; margin-left: 0.5rem; }
 
@@ -857,7 +862,7 @@ export const styles = `
     .graph-ctx-legend .cl-ctx i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
     .doc-toc-title { text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.68rem; color: var(--text-dim); margin: 0 0 0.5rem 0.85rem; }
     .doc-toc ul { list-style: none; margin: 0; padding: 0; border-left: 1px solid var(--border); }
-    .doc-toc li a { display: block; padding: 0.25rem 0.6rem 0.25rem 0.85rem; margin-left: -1px; border-left: 2px solid transparent; color: var(--text-muted); text-decoration: none; line-height: 1.3; overflow-wrap: anywhere; }
+    .doc-toc li a { display: block; padding: 0.25rem 0.6rem 0.25rem 0.85rem; margin-left: -1px; border-left: 2px solid transparent; border-bottom: none; color: var(--text-muted); text-decoration: none; line-height: 1.3; overflow-wrap: anywhere; }
     .doc-toc li a:hover { color: var(--text-bright); border-left-color: var(--accent); }
     .doc-toc .toc-l2 a { padding-left: 1.5rem; }
     .doc-toc .toc-l3 a { padding-left: 2.15rem; }
