@@ -364,15 +364,19 @@ export const styles = `
       font-family: 'IBM Plex Mono', monospace;
     }
     header h1 a:hover { border-bottom: none; }
-    nav { display: flex; gap: 1rem; }
-    nav a {
+    /* Scoped to the HEADER nav only — bare 'nav' selectors leak into the
+       content navs (.doc-toc, .doc-connections), bordering their links and
+       flex-rowing their contents. The header pills want the button look; the
+       gutters do not. */
+    header nav { display: flex; gap: 1rem; }
+    header nav a {
       font-size: 0.8rem; padding: 0.35rem 0.7rem; border: 1px solid var(--border);
       border-bottom: 1px solid var(--border);
       text-transform: uppercase; letter-spacing: 0.08em;
       color: var(--text-muted); transition: all 0.1s;
       font-family: 'IBM Plex Mono', monospace;
     }
-    nav a:hover {
+    header nav a:hover {
       color: var(--text-bright); border-color: var(--text-bright);
       background: var(--surface); box-shadow: 2px 2px 0 var(--border);
     }
