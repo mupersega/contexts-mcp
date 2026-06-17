@@ -808,8 +808,8 @@ export const styles = `
        Clean: no rail border — hover just brightens the entry.
        Hidden when the gutter is too small (narrow window or wide content mode). */
     .doc-toc {
-      position: fixed; top: 5.75rem; left: 1.75rem; width: 13rem; z-index: 5;
-      max-height: calc(100vh - 7.5rem); overflow-y: auto; font-size: 0.8rem;
+      position: fixed; top: 1rem; left: 1rem; width: 13rem; z-index: 5;
+      max-height: calc(100vh - 2rem); overflow-y: auto; font-size: 0.8rem;
     }
     @media (max-width: 1320px) { .doc-toc { display: none; } }
     :root[data-width="medium"] .doc-toc { display: none; }
@@ -867,7 +867,9 @@ export const styles = `
     .graph-ctx-legend .cl-ctx i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
     .doc-toc-title { text-transform: uppercase; letter-spacing: 0.15em; font-size: 0.62rem; color: var(--text-dim); margin: 0 0 0.7rem 0; }
     .doc-toc ul { list-style: none; margin: 0; padding: 0; }
-    .doc-toc li a { display: block; padding: 0.22rem 0; border-bottom: none; color: var(--text-dim); text-decoration: none; line-height: 1.35; overflow-wrap: anywhere; transition: color 120ms; }
+    .doc-toc li { border-bottom: 1px solid var(--border); }
+    .doc-toc li:last-child { border-bottom: none; }
+    .doc-toc li a { display: block; padding: 0.35rem 0; border-bottom: none; color: var(--text-dim); text-decoration: none; line-height: 1.35; overflow-wrap: anywhere; transition: color 120ms; }
     .doc-toc li a:hover { color: var(--text-bright); }
     .doc-toc .toc-l2 a { padding-left: 0.9rem; }
     .doc-toc .toc-l3 a { padding-left: 1.7rem; }
