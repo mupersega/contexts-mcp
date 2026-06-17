@@ -255,6 +255,10 @@ export const styles = `
        corners don't show through as a hard square. */
     .doc-content table { overflow: hidden; }
 
+    /* Smooth in-page scrolling for TOC anchor jumps (honour reduced-motion). */
+    html { scroll-behavior: smooth; }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
     body {
       font-family: 'IBM Plex Mono', 'Courier New', monospace;
       font-size: 14px; font-weight: 400; letter-spacing: 0.01em;
