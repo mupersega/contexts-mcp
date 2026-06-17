@@ -594,13 +594,21 @@ export const styles = `
       font-size: 0.65rem; color: var(--text-dim); letter-spacing: 0.15em;
       margin-top: 1.5rem; text-transform: uppercase; font-family: 'IBM Plex Mono', monospace;
     }
+    /* Article prose uses a proportional reading face. Headings (h1-h3), inline
+       code, code blocks, tables and the raw view keep monospace (set explicitly)
+       so the terminal character stays where it reads well. Line length is NOT
+       capped here — it stays governed by the width selector. */
+    .doc-content {
+      font-family: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      font-size: 15px; line-height: 1.7; letter-spacing: 0;
+    }
     .doc-content h1, .doc-content h2, .doc-content h3 {
       font-family: 'IBM Plex Mono', 'Courier New', monospace; font-weight: 600;
       text-transform: uppercase; letter-spacing: 0.06em;
-      margin: 1.5rem 0 0.75rem; padding-bottom: 0.3rem; border-bottom: 1px solid var(--border);
+      margin: 1.75rem 0 0.85rem; padding-bottom: 0.3rem; border-bottom: 1px solid var(--border);
     }
     .doc-content h1:first-child, .doc-content h2:first-child { margin-top: 0; }
-    .doc-content p { margin-bottom: 0.75rem; }
+    .doc-content p { margin-bottom: 1.1rem; }
     .doc-content code {
       background: var(--code-bg); padding: 0.15rem 0.4rem; font-size: 0.85em;
       border: 1px solid var(--border); font-family: 'IBM Plex Mono', monospace;
@@ -608,6 +616,7 @@ export const styles = `
     .doc-content pre {
       background: var(--pre-bg); padding: 1rem; overflow-x: auto; margin-bottom: 1rem;
       border: 1px solid var(--border); position: relative;
+      font-family: 'IBM Plex Mono', monospace;
     }
     .doc-content pre::before {
       content: 'CODE'; position: absolute; top: 0.25rem; right: 0.5rem;
@@ -619,6 +628,7 @@ export const styles = `
     .doc-content table {
       border-collapse: collapse; margin: 1rem 0; font-size: 0.85rem;
       width: 100%; border: 1px solid var(--border);
+      font-family: 'IBM Plex Mono', monospace;
     }
     .doc-content th, .doc-content td {
       border: 1px solid var(--border); padding: 0.4rem 0.75rem;
@@ -633,7 +643,8 @@ export const styles = `
     .doc-content td code, .doc-content th code {
       border: none; background: none; padding: 0; color: var(--text-bright);
     }
-    .doc-content ul, .doc-content ol { padding-left: 1.5rem; margin-bottom: 0.75rem; }
+    .doc-content ul, .doc-content ol { padding-left: 1.5rem; margin-bottom: 1.1rem; }
+    .doc-content li { margin-bottom: 0.3rem; }
     /* GFM task lists ([ ] / [x]): the global input rule above stretches the
        checkbox to full width; restore a normal inline checkbox and drop the
        list bullet on items that contain one. */
