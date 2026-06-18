@@ -25,6 +25,9 @@ export const styles = `
       --sticky-header-h: 2.9rem;
       --sticky-crumb-h: 2.25rem;
       --font-scale: 1;
+      /* Reserved width per side for the TOC / connections gutters in wide mode
+         (generous on purpose — the panels should not feel cramped). */
+      --gutter: 18rem;
     }
 
     /* Text size — multiplies ONLY the text font-sizes (body + article); the
@@ -895,6 +898,19 @@ export const styles = `
     :root[data-width="medium"] .doc-connections-inline { display: block; }
     @media (min-width: 1640px) { :root[data-width="medium"] .doc-connections-inline { display: none; } }
     :root[data-width="wide"] .doc-connections-inline { display: block; }
+
+    /* Wide mode, above the tablet floor: reserve a gutter on each side so the
+       TOC + connections always have room, instead of the content eating the
+       whole viewport. Below the floor, wide stays full-width and the connections
+       fall to the bottom (the cramped-window fallback we keep everywhere). These
+       rules carry the [data-width="wide"] prefix, so they out-specify the generic
+       max-width hides and win above 1200px. */
+    @media (min-width: 1200px) {
+      :root[data-width="wide"] .container { max-width: calc(100vw - 2 * var(--gutter)); }
+      :root[data-width="wide"] .doc-toc { display: block; }
+      :root[data-width="wide"] .doc-connections { display: block; }
+      :root[data-width="wide"] .doc-connections-inline { display: none; }
+    }
     .doc-connections-inline h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); margin: 0 0 0.75rem 0; }
     .doc-connections-inline .conn-group { margin-bottom: 0.75rem; }
     .doc-connections-inline .conn-group h4 { font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin: 0 0 0.3rem 0; font-weight: 400; }
