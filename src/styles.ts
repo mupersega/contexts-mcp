@@ -22,7 +22,7 @@ export const styles = `
       --scanline: rgba(0,0,0,0.035); --vignette: rgba(0,0,0,0.35);
       --noise-blend: overlay; --noise-opacity: 0.35;
       --container-shadow: rgba(0,0,0,0.25);
-      --sticky-header-h: 3.25rem;
+      --sticky-header-h: 2.9rem;
       --sticky-crumb-h: 2.25rem;
     }
 
@@ -506,7 +506,9 @@ export const styles = `
     .doc-topbar {
       display: flex; align-items: center; justify-content: space-between; gap: 1rem;
       position: sticky; top: var(--sticky-header-h); z-index: 20; background: var(--bg);
-      padding: 0.4rem 0; margin-bottom: 1.5rem; border-bottom: 1px dotted var(--border);
+      /* Generous top padding so the small overlap under the header (which covers
+         the sticky seam — no peek-through) never clips the breadcrumb text. */
+      padding: 0.6rem 0 0.45rem; margin-bottom: 1.5rem; border-bottom: 1px dotted var(--border);
     }
     .doc-topbar .breadcrumb {
       margin: 0; padding: 0; border: none; position: static;
