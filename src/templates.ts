@@ -906,12 +906,18 @@ const GRAPH_SCRIPT = `
   function v(name, fb){ var x = cs.getPropertyValue(name).trim(); return x || fb; }
   var ACCENT = v('--accent','#4ade80'), MUTED = v('--text-muted','#7d8491'),
       DIM = v('--text-dim','#5a6070'), BRIGHT = v('--text-bright','#e6e8ec'),
-      BG = v('--bg','#0c0e12');
+      TEXT = v('--text','#c9d1d9'), BG = v('--bg','#0c0e12');
   var nodes = [], edges = [], byId = {}, colorOf = {},
       hover = null, drag = null, moved = false, filter = '',
       panning = false, panSX = 0, panSY = 0, panCX = 0, panCY = 0;
+  // Settle gate: the sim relaxes, then freezes; labels stay hidden (labelAlpha 0)
+  // until it is calm, then fade in — so text never jitters while nodes are moving.
+  var settled = false, calm = 0, labelAlpha = 0, tick = 0;
   // Camera: cam.x/cam.y is the WORLD point shown at the centre of the canvas.
   var cam = { x: 0, y: 0, scale: 1 };
+  // Tuning: EASE = focus glide rate (lower = gentler/slower); HOVER_DELAY = ms the
+  // pointer must rest on a node before it focuses (kills strobing on fast sweeps).
+  var EASE = 0.16, HOVER_DELAY = 110;
   function clamp(x, lo, hi){ return x < lo ? lo : (x > hi ? hi : x); }
   function baseR(n){ return 4 + Math.min(11, n.degree * 1.6); }
   function rScreen(n){ return clamp(baseR(n) * cam.scale, 2.5, 30); }
@@ -930,7 +936,8 @@ const GRAPH_SCRIPT = `
       // instead of exploding out of a single overlapping pile at the origin.
       var a = i * 2.399963, rad = Math.sqrt(i) * 34;
       return { id:n.id, label:(n.title||n.item), context:n.context, item:n.item, degree:n.degree,
-        x: Math.cos(a)*rad, y: Math.sin(a)*rad, vx:0, vy:0, fixed:false, adj:{} };
+        x: Math.cos(a)*rad, y: Math.sin(a)*rad, vx:0, vy:0, fixed:false, adj:{},
+        foc:1, lab:0, hot:0 }; // eased: foc=highlight, lab=label opacity, hot=focal node
     });
     nodes.forEach(function(n){ byId[n.id]=n; });
     var ctxs = [];
@@ -941,37 +948,53 @@ const GRAPH_SCRIPT = `
     if (leg){ leg.innerHTML = ctxs.map(function(c){ return '<span class="cl-ctx"><i style="background:'+colorOf[c]+'"></i>'+c.replace(/[<>&"]/g,'')+'</span>'; }).join(''); }
     edges = (g.edges||[]).filter(function(e){ return ok[e.source] && ok[e.target]; })
       .map(function(e){ var s=byId[e.source], t=byId[e.target]; s.adj[t.id]=1; t.adj[s.id]=1; return { s:s, t:t, kind:e.kind }; });
-    for (var w=0; w<320; w++) step();   // warm the layout off-screen so the first paint is settled
+    // Relax fully OFF-SCREEN — until calm, capped — so the very first painted
+    // frame is already settled. Nodes never visibly drift; the labels just fade
+    // in. (Adaptive: stops early once quiet, runs longer for a stubborn layout.)
+    var wv = 1; for (var w=0; w<1400 && (w < 80 || wv > 0.4); w++) wv = step();
+    settled = true;
     fitView(70);
     requestAnimationFrame(loop);
   }).catch(function(){ if(empty){ empty.textContent='Could not load the graph.'; empty.style.display='block'; } });
 
+  // One simulation tick. Returns the largest per-node speed so the loop can tell
+  // when the layout has gone calm.
   function step(){
+    // Per-context centroids — a mild cohesion pull (below) groups same-context
+    // items into one clump; cross-context pairs repel harder (in the loop below)
+    // so distinct contexts stop sitting on top of one another.
+    var cen = {};
+    for (var ci=0;ci<nodes.length;ci++){ var cn=nodes[ci];
+      var ce=cen[cn.context]||(cen[cn.context]={x:0,y:0,n:0}); ce.x+=cn.x; ce.y+=cn.y; ce.n++; }
+    for (var ck in cen){ cen[ck].x/=cen[ck].n; cen[ck].y/=cen[ck].n; }
     for (var i=0;i<nodes.length;i++){
       var a = nodes[i];
       for (var j=i+1;j<nodes.length;j++){
         var b = nodes[j];
         var dx=a.x-b.x, dy=a.y-b.y, d2=dx*dx+dy*dy||0.01, d=Math.sqrt(d2);
-        var f=2600/d2, fx=dx/d*f, fy=dy/d*f;
+        var f=(a.context===b.context?2300:5400)/d2, fx=dx/d*f, fy=dy/d*f;
         a.vx+=fx; a.vy+=fy; b.vx-=fx; b.vy-=fy;
       }
     }
     for (var e=0;e<edges.length;e++){
       var ed=edges[e], ex=ed.t.x-ed.s.x, ey=ed.t.y-ed.s.y, el=Math.sqrt(ex*ex+ey*ey)||0.01;
-      var rest = ed.kind==='link'?78:150, k = ed.kind==='link'?0.022:0.009;
+      var rest = ed.kind==='link'?80:165, k = ed.kind==='link'?0.022:0.008;
       var ef=(el-rest)*k, efx=ex/el*ef, efy=ey/el*ef;
       ed.s.vx+=efx; ed.s.vy+=efy; ed.t.vx-=efx; ed.t.vy-=efy;
     }
+    var maxv=0;
     for (var n=0;n<nodes.length;n++){
       var p=nodes[n];
       if (p.fixed){ p.vx=0; p.vy=0; continue; }
-      // Gentle gravity toward the world origin keeps the (unbounded) layout from
-      // drifting; damping + a velocity cap keep it from ever flying apart.
-      p.vx += (0-p.x)*0.0020; p.vy += (0-p.y)*0.0020;
+      var cc=cen[p.context];
+      p.vx += (cc.x-p.x)*0.010; p.vy += (cc.y-p.y)*0.010;   // context cohesion
+      p.vx += (0-p.x)*0.0014; p.vy += (0-p.y)*0.0014;       // gentle global gravity (unbounded world)
       p.vx*=0.86; p.vy*=0.86;
       p.vx=clamp(p.vx,-40,40); p.vy=clamp(p.vy,-40,40);
       p.x+=p.vx; p.y+=p.vy;
+      var spd=Math.abs(p.vx)+Math.abs(p.vy); if (spd>maxv) maxv=spd;
     }
+    return maxv;
   }
 
   // Frame the whole graph in the viewport with a little padding.
@@ -989,22 +1012,32 @@ const GRAPH_SCRIPT = `
   function matches(n){ return !filter || String(n.label).toLowerCase().indexOf(filter)>=0 || String(n.context).toLowerCase().indexOf(filter)>=0; }
   function onScreen(n){ var x=sx(n.x), y=sy(n.y); return x>-40 && x<W+40 && y>-40 && y<H+40; }
 
+  // Target highlight for a node: 1 = lit, 0 = dimmed. Drives the eased n.foc.
+  function focTarget(n){
+    if (hover) return (n===hover || hover.adj[n.id]) ? 1 : 0;
+    if (filter) return matches(n) ? 1 : 0;
+    return 1;
+  }
+
   function draw(){
     ctx.clearRect(0,0,W,H);
-    // Edges
+    // Glide every node toward its targets so hover/filter focus fades in and out
+    // instead of snapping — calm even while sweeping the mouse. foc = highlight
+    // (self + neighbours), hot = the single focal node (its bright/ring/lift).
+    for (var fi=0; fi<nodes.length; fi++){ var fn=nodes[fi];
+      fn.foc += (focTarget(fn) - fn.foc) * EASE;
+      fn.hot += ((fn===hover?1:0) - fn.hot) * EASE; }
+    // Edges — lit only when both endpoints are lit; focal edges ease up brighter.
     for (var e=0;e<edges.length;e++){
       var ed=edges[e];
-      var connHover = hover && (ed.s===hover || ed.t===hover);
-      var dimF = filter && !(matches(ed.s) || matches(ed.t));
-      var dimH = hover && !connHover;
-      var alpha = ed.kind==='link'?0.5:0.4;
-      if (dimF) alpha = 0.04;
-      else if (dimH) alpha = 0.05;
-      else if (connHover) alpha = ed.kind==='link'?0.85:0.7;
+      var emph = Math.max(ed.s.hot, ed.t.hot);          // eased focal emphasis 0..1
+      var lit = Math.min(ed.s.foc, ed.t.foc);
+      var baseA = ed.kind==='link'?0.5:0.4;
+      var hi = baseA + ((ed.kind==='link'?0.85:0.7) - baseA) * emph;
       ctx.beginPath(); ctx.moveTo(sx(ed.s.x),sy(ed.s.y)); ctx.lineTo(sx(ed.t.x),sy(ed.t.y));
       ctx.strokeStyle = ed.kind==='link'?MUTED:DIM;
-      ctx.globalAlpha = alpha;
-      ctx.lineWidth = connHover?1.6:1;
+      ctx.globalAlpha = 0.05 + (hi - 0.05) * lit;
+      ctx.lineWidth = 1 + 0.6 * emph;
       ctx.setLineDash(ed.kind==='link'?[]:[3,3]);
       ctx.stroke();
     }
@@ -1013,12 +1046,16 @@ const GRAPH_SCRIPT = `
     for (var i=0;i<nodes.length;i++){
       var n=nodes[i];
       if (!onScreen(n)) continue;
-      var r=rScreen(n);
-      var dim = (filter && !matches(n)) || (hover && n!==hover && !hover.adj[n.id]);
-      ctx.globalAlpha = dim?0.16:1;
-      ctx.beginPath(); ctx.arc(sx(n.x),sy(n.y),r,0,Math.PI*2);
-      ctx.fillStyle = (n===hover)?BRIGHT:(colorOf[n.context]||ACCENT); ctx.fill();
-      if (n===hover){ ctx.lineWidth=1.6; ctx.strokeStyle=(colorOf[n.context]||ACCENT); ctx.stroke(); }
+      var vis = 0.16 + 0.84 * n.foc, col = colorOf[n.context] || ACCENT;
+      var r = rScreen(n) * (1 + 0.20 * n.hot);          // gentle eased lift on focus
+      var px = sx(n.x), py = sy(n.y);
+      ctx.beginPath(); ctx.arc(px,py,r,0,Math.PI*2);
+      ctx.globalAlpha = vis; ctx.fillStyle = col; ctx.fill();
+      if (n.hot > 0.01){
+        // Fade the focal node toward bright + ring it, rather than snapping white.
+        ctx.globalAlpha = vis * n.hot; ctx.fillStyle = BRIGHT; ctx.fill();
+        ctx.lineWidth = 1.6; ctx.strokeStyle = col; ctx.stroke();
+      }
     }
     ctx.globalAlpha=1;
     drawLabels();
@@ -1049,12 +1086,14 @@ const GRAPH_SCRIPT = `
 
   function drawLabels(){
     ctx.font='12px "IBM Plex Mono", monospace'; ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.lineJoin='round'; ctx.miterLimit=2; ctx.lineWidth=3.5; ctx.strokeStyle=BG;
     var idle = !hover && !filter, budget = idle ? idleBudget() : 9999, shown = 0;
+    // Phase 1 — pick this frame's label set (priority + budget + collision), and
+    // flag each chosen node with _lt=1.
     var cand = [];
-    for (var i=0;i<nodes.length;i++){ if (onScreen(nodes[i])) cand.push(nodes[i]); }
+    for (var i=0;i<nodes.length;i++){ var nn=nodes[i]; nn._lt = 0; if (onScreen(nn)) cand.push(nn); }
     cand.sort(function(a,b){ var pa=priority(a), pb=priority(b); return pa!==pb ? pb-pa : b.degree-a.degree; });
     var placed = [];
-    ctx.shadowColor = BG; ctx.shadowBlur = 4;
     for (var c=0;c<cand.length;c++){
       var n=cand[c], pri=priority(n), force=(n===hover);
       if (!force && pri < 1) continue;
@@ -1068,15 +1107,40 @@ const GRAPH_SCRIPT = `
           if (rect.x<q.x+q.w && rect.x+rect.w>q.x && rect.y<q.y+q.h && rect.y+rect.h>q.y){ hit=true; break; } }
         if (hit) continue;
       }
-      placed.push(rect);
-      ctx.fillStyle = (priority(n)>=2 || n===hover) ? BRIGHT : MUTED;
-      ctx.fillText(text, x, y);
+      placed.push(rect); n._lt = 1;
       if (idle && ++shown >= budget) break;
     }
-    ctx.shadowBlur = 0;
+    // Phase 2 — ease each label's opacity toward its target and draw. A label that
+    // dropped out of the set fades away rather than blinking off. Gated by
+    // labelAlpha (the settle fade), so nothing shows until the layout is calm.
+    for (var d=0; d<nodes.length; d++){
+      var m=nodes[d];
+      m.lab += (m._lt - m.lab) * 0.22;
+      var a = labelAlpha * m.lab;
+      if (a < 0.03 || !onScreen(m)) continue;
+      var t = String(m.label); if (t.length>30) t = t.slice(0,29)+'\\u2026';
+      var lx = sx(m.x) + rScreen(m) + 5, ly = sy(m.y);
+      ctx.globalAlpha = a;
+      ctx.strokeText(t, lx, ly); // dark outline knocks the text out of the busy edges
+      ctx.fillStyle = (priority(m)>=2 || m===hover) ? BRIGHT : TEXT;
+      ctx.fillText(t, lx, ly);
+    }
+    ctx.globalAlpha = 1;
   }
 
-  function loop(){ step(); draw(); requestAnimationFrame(loop); }
+  // Step while relaxing or dragging; once calm, freeze the layout (no drift) and
+  // fade the labels in. Camera moves (pan/zoom) just redraw — they never reheat.
+  function loop(){
+    if (!settled || drag){
+      var v = step();
+      // Calm for a few frames -> settled. Fallback: force it after ~4s so labels
+      // always arrive even if the layout keeps drifting imperceptibly.
+      if (!settled){ if (v < 0.5) calm++; else calm = 0; if (calm > 6 || ++tick > 240) settled = true; }
+    }
+    labelAlpha += ((settled?1:0) - labelAlpha) * 0.18;
+    draw();
+    requestAnimationFrame(loop);
+  }
 
   function at(mx,my){
     for (var i=nodes.length-1;i>=0;i--){ var n=nodes[i];
@@ -1086,12 +1150,23 @@ const GRAPH_SCRIPT = `
   }
   function pos(ev){ var rc=canvas.getBoundingClientRect(); return { x:ev.clientX-rc.left, y:ev.clientY-rc.top }; }
 
+  // Hover intent: only commit a focus after the pointer rests on the same node
+  // for HOVER_DELAY ms, so sweeping the mouse across nodes never strobes. The
+  // cursor still reacts instantly — only the (expensive) focus is debounced.
+  var pendingHover = null, hoverTimer = 0;
+  function aimHover(t){
+    if (t === pendingHover) return;
+    pendingHover = t;
+    if (hoverTimer) clearTimeout(hoverTimer);
+    hoverTimer = setTimeout(function(){ hover = pendingHover; hoverTimer = 0; }, HOVER_DELAY);
+  }
   canvas.addEventListener('mousemove', function(ev){
     var p=pos(ev);
     if (drag){ drag.x=toWorldX(p.x); drag.y=toWorldY(p.y); drag.fixed=true; moved=true; }
     else if (panning){ cam.x = panCX - (p.x-panSX)/cam.scale; cam.y = panCY - (p.y-panSY)/cam.scale; }
-    else { hover=at(p.x,p.y); canvas.style.cursor=hover?'pointer':'grab'; }
+    else { var t=at(p.x,p.y); canvas.style.cursor=t?'pointer':'grab'; aimHover(t); }
   });
+  canvas.addEventListener('mouseleave', function(){ aimHover(null); });
   canvas.addEventListener('mousedown', function(ev){
     var p=pos(ev), n=at(p.x,p.y);
     if (n){ drag=n; moved=false; }
