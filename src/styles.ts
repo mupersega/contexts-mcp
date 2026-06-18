@@ -22,7 +22,7 @@ export const styles = `
       --scanline: rgba(0,0,0,0.035); --vignette: rgba(0,0,0,0.35);
       --noise-blend: overlay; --noise-opacity: 0.35;
       --container-shadow: rgba(0,0,0,0.25);
-      --sticky-header-h: 4.5rem;
+      --sticky-header-h: 3.25rem;
       --sticky-crumb-h: 2.25rem;
     }
 
@@ -308,7 +308,7 @@ export const styles = `
 
     /* --- Header --- */
     header {
-      border-bottom: 2px double var(--border-heavy); padding: 1rem 0; margin-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border-heavy); padding: 0.45rem 0; margin-bottom: 1rem;
       display: flex; align-items: center; justify-content: space-between;
       position: sticky; top: 0; z-index: 30; background: var(--bg);
     }
@@ -359,7 +359,7 @@ export const styles = `
     }
     #width-popout button:hover { color: var(--text-bright); background: var(--surface-raised); }
     #width-popout button.active { color: var(--accent); }
-    header h1 { font-size: 1.4rem; letter-spacing: 0.15em; }
+    header h1 { font-size: 1rem; letter-spacing: 0.12em; }
     header h1 a { color: var(--text-bright); border-bottom: none; }
     header h1 a::before { content: '> '; color: var(--text-dim); font-family: 'IBM Plex Mono', monospace; }
     header h1 a::after {
@@ -499,14 +499,40 @@ export const styles = `
     .ctx-link:hover { color: var(--text-bright); border-color: var(--text-bright); border-bottom-style: solid; }
     .ctx-meta-actions { margin-top: 0.75rem; }
 
-    .item-title-sticky {
-      display: flex; justify-content: space-between; align-items: flex-start;
-      padding: 0.75rem 0; margin-bottom: 1rem;
-      border-bottom: 1px dotted var(--border);
-      position: sticky;
-      top: calc(var(--sticky-header-h) + var(--sticky-crumb-h));
-      z-index: 10; background: var(--bg);
+    /* Item-view top bar: the ONLY sticky chrome inside the article. Breadcrumb
+       path on the left, action icons on the right. The title/meta/tags block
+       (.doc-header) below it is NOT sticky — it scrolls away so the article gets
+       the vertical space back. */
+    .doc-topbar {
+      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+      position: sticky; top: var(--sticky-header-h); z-index: 20; background: var(--bg);
+      padding: 0.4rem 0; margin-bottom: 1.5rem; border-bottom: 1px dotted var(--border);
     }
+    .doc-topbar .breadcrumb {
+      margin: 0; padding: 0; border: none; position: static;
+      flex: 1 1 auto; min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .doc-actions { display: flex; align-items: center; gap: 0.2rem; flex: 0 0 auto; }
+    .icon-btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 1.85rem; height: 1.85rem; padding: 0;
+      border: 1px solid transparent; border-bottom: 1px solid transparent;
+      background: transparent; color: var(--text-muted); cursor: pointer;
+      text-decoration: none; transition: color 0.1s, border-color 0.1s, background 0.1s;
+    }
+    .icon-btn:hover { color: var(--text-bright); border-color: var(--border); background: var(--surface); }
+    .icon-btn svg { width: 16px; height: 16px; display: block; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
+    .icon-btn.is-active { color: var(--accent); }
+    .icon-btn.is-copied { color: var(--accent); border-color: var(--border); }
+    .icon-btn.is-error { color: var(--accent-complement); }
+    .icon-btn-danger:hover { color: var(--accent-complement); border-color: var(--accent-complement); background: var(--surface); }
+
+    /* Non-sticky article header — scrolls away with the content. */
+    .doc-header { margin-bottom: 1.5rem; }
+    .doc-header h2 { margin: 0; }
+    .doc-header .meta { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.4rem; }
+    .doc-header-tags { margin-top: 0.6rem; }
 
     /* --- Buttons --- */
     .btn {
@@ -889,7 +915,7 @@ export const styles = `
     .doc-toc .toc-l2 a { padding-left: 0.9rem; }
     .doc-toc .toc-l3 a { padding-left: 1.7rem; }
     .doc-toc .toc-l4 a, .doc-toc .toc-l5 a, .doc-toc .toc-l6 a { padding-left: 2.4rem; }
-    .doc-content h1, .doc-content h2, .doc-content h3, .doc-content h4, .doc-content h5, .doc-content h6 { scroll-margin-top: 15rem; }
+    .doc-content h1, .doc-content h2, .doc-content h3, .doc-content h4, .doc-content h5, .doc-content h6 { scroll-margin-top: 6.5rem; }
 
     /* --- Embedded markdown media (attachments from assets/) --- */
     .doc-content img { max-width: 100%; height: auto; border-radius: 4px; }

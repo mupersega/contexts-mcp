@@ -406,12 +406,17 @@ export function layout(title: string, body: string): string {
           ? navigator.clipboard.writeText(out)
           : Promise.reject(new Error('clipboard unavailable'));
       }).then(function() {
-        var original = btn.textContent;
-        btn.textContent = 'Copied';
-        setTimeout(function(){ btn.textContent = original; }, 1200);
+        // The button is now an icon; swap its SVG for a checkmark (don't clobber
+        // it with a text node), then restore.
+        var orig = btn.innerHTML;
+        btn.classList.add('is-copied');
+        btn.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5 L6.4 12 L13 4.5"/></svg>';
+        setTimeout(function(){ btn.innerHTML = orig; btn.classList.remove('is-copied'); }, 1200);
       }).catch(function(err){
-        btn.textContent = 'Copy failed';
-        setTimeout(function(){ btn.textContent = 'Copy'; }, 1500);
+        var t = btn.getAttribute('title');
+        btn.classList.add('is-error');
+        btn.setAttribute('title', 'Copy failed');
+        setTimeout(function(){ btn.classList.remove('is-error'); if (t) btn.setAttribute('title', t); }, 1500);
       });
     });
   })();
@@ -735,6 +740,20 @@ export function itemListPage(
   );
 }
 
+// Inline action icons (16px square; stroke + fill come from CSS via currentColor).
+// Kept minimal to suit the terminal aesthetic; sit as a row in the sticky topbar.
+const ICONS: Record<string, string> = {
+  copy: `<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.2" y="5.2" width="8.3" height="8.3" rx="1.4"/><path d="M3.2 10.8 H2.9 A1.4 1.4 0 0 1 1.5 9.4 V2.9 A1.4 1.4 0 0 1 2.9 1.5 H9.4 A1.4 1.4 0 0 1 10.8 2.9 V3.2"/></svg>`,
+  download: `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2 V9.6"/><path d="M4.8 6.6 L8 9.9 L11.2 6.6"/><path d="M2.6 13 H13.4"/></svg>`,
+  code: `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.6 4.4 L2 8 L5.6 11.6"/><path d="M10.4 4.4 L14 8 L10.4 11.6"/></svg>`,
+  doc: `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.3 H9 L12 5.3 V13.7 H4 Z"/><path d="M9 2.3 V5.3 H12"/><path d="M5.9 8.4 H10.1 M5.9 10.6 H10.1"/></svg>`,
+  edit: `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10.4 2.7 L13.3 5.6 L6 12.9 L3.1 13.5 L3.7 10.6 Z"/><path d="M9.2 3.9 L12.1 6.8"/></svg>`,
+  revert: `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.8 6.5 H9 A4 4 0 1 1 5 10.9"/><path d="M2.8 6.5 L5.1 4.3 M2.8 6.5 L5.1 8.7"/></svg>`,
+};
+function icon(name: string): string {
+  return ICONS[name] || "";
+}
+
 export function itemViewPage(
   context: string,
   name: string,
@@ -826,26 +845,26 @@ export function itemViewPage(
   return layout(
     title,
     `
-    <div class="breadcrumb">
-      <a href="/">Contexts</a> / <a href="/ctx/${esc(context)}">${esc(context)}</a> / <strong>${esc(name)}.${esc(extension)}</strong>${rawMode ? ' <span style="color:var(--text-dim);">(raw)</span>' : ""}
+    <div class="doc-topbar">
+      <div class="breadcrumb">
+        <a href="/">Contexts</a> / <a href="/ctx/${esc(context)}">${esc(context)}</a> / <strong>${esc(name)}.${esc(extension)}</strong>${rawMode ? ' <span style="color:var(--text-dim);">(raw)</span>' : ""}
+      </div>
+      <div class="doc-actions">
+        <button type="button" class="icon-btn" data-copy-raw="${rawUrl}" data-ext="${esc(extension)}" title="${isMarkdown ? "Copy body (Alt = include frontmatter)" : "Copy raw content"}" aria-label="Copy">${icon("copy")}</button>
+        <a class="icon-btn" href="${rawUrl}&amp;download=1" title="Download" aria-label="Download">${icon("download")}</a>
+        <a class="icon-btn${rawMode ? " is-active" : ""}" href="${rawToggleHref}" title="${rawToggleLabel}" aria-label="${rawToggleLabel}">${icon(rawMode ? "doc" : "code")}</a>
+        <a class="icon-btn" href="/ctx/${esc(context)}/${esc(name)}/edit?ext=${esc(extension)}" title="Edit" aria-label="Edit">${icon("edit")}</a>
+        ${hasBackup ? `<button type="button" class="icon-btn icon-btn-danger" hx-post="/ctx/${esc(context)}/${esc(name)}/revert?ext=${esc(extension)}" hx-confirm="Revert '${esc(name)}.${esc(extension)}' to previous version? This is one-shot." title="Restore the previous version. One-shot — cannot be undone." aria-label="Revert">${icon("revert")}</button>` : ""}
+      </div>
     </div>
-    <div class="item-title-sticky">
-      <div>
-        <h2><span class="item-kind">${extension.toUpperCase()}</span>${esc(title)}</h2>
-        <div class="meta" style="color:var(--text-muted); font-size:0.85rem;">
-          ${esc(name)}.${esc(extension)}
-          &middot; Created ${esc(created ? new Date(created).toLocaleDateString() : "unknown")}
-          &middot; Updated ${esc(updated ? new Date(updated).toLocaleDateString() : "unknown")}
-        </div>
-        ${tagList.length ? `<div style="margin-top:0.5rem;">${tags(tagList)}</div>` : ""}
+    <div class="doc-header">
+      <h2><span class="item-kind">${extension.toUpperCase()}</span>${esc(title)}</h2>
+      <div class="meta">
+        ${esc(name)}.${esc(extension)}
+        &middot; Created ${esc(created ? new Date(created).toLocaleDateString() : "unknown")}
+        &middot; Updated ${esc(updated ? new Date(updated).toLocaleDateString() : "unknown")}
       </div>
-      <div class="actions">
-        <button type="button" class="btn btn-sm" data-copy-raw="${rawUrl}" data-ext="${esc(extension)}" title="${isMarkdown ? "Copy body (Alt = include frontmatter)" : "Copy raw content"}">Copy</button>
-        <a class="btn btn-sm" href="${rawUrl}&amp;download=1">Download</a>
-        <a class="btn btn-sm" href="${rawToggleHref}">${rawToggleLabel}</a>
-        <a href="/ctx/${esc(context)}/${esc(name)}/edit?ext=${esc(extension)}" class="btn btn-sm">Edit</a>
-        ${hasBackup ? `<button type="button" class="btn btn-sm btn-danger" hx-post="/ctx/${esc(context)}/${esc(name)}/revert?ext=${esc(extension)}" hx-confirm="Revert '${esc(name)}.${esc(extension)}' to previous version? This is one-shot." title="Restore the previous version. One-shot — cannot be undone.">Revert</button>` : ""}
-      </div>
+      ${tagList.length ? `<div class="doc-header-tags">${tags(tagList)}</div>` : ""}
     </div>
     <div class="doc-layout${tocHtml ? " has-toc" : ""}">
       ${tocHtml}

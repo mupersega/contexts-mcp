@@ -502,14 +502,17 @@ app.post("/ctx/:context/:item/append", async (req, res) => {
       const base = `/ctx/${escHtml(context)}/${escHtml(itemName)}`;
       // htmx positional OOB (beforeend:<selector>) swaps the OOB element's
       // *content* into the target, not the element itself — so the attribute
-      // must sit on a wrapper, or only the bare "Revert" text node lands in
-      // .actions and the button is stripped (inert until reload).
+      // must sit on a wrapper, or only the bare button text lands in
+      // .doc-actions and the button is stripped (inert until reload). The icon
+      // SVG mirrors ICONS.revert in templates.ts.
+      const revertIcon =
+        `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.8 6.5 H9 A4 4 0 1 1 5 10.9"/><path d="M2.8 6.5 L5.1 4.3 M2.8 6.5 L5.1 8.7"/></svg>`;
       revertOob =
-        `<div hx-swap-oob="beforeend:.actions">` +
-        `<button type="button" class="btn btn-sm btn-danger"` +
+        `<div hx-swap-oob="beforeend:.doc-actions">` +
+        `<button type="button" class="icon-btn icon-btn-danger"` +
         ` hx-post="${base}/revert?ext=${escHtml(item.extension)}"` +
         ` hx-confirm="Revert '${escHtml(itemName)}.${escHtml(item.extension)}' to previous version? This is one-shot."` +
-        ` title="Restore the previous version. One-shot — cannot be undone.">Revert</button>` +
+        ` title="Restore the previous version. One-shot — cannot be undone." aria-label="Revert">${revertIcon}</button>` +
         `</div>`;
     }
     res.send(contentHtml + revertOob);
