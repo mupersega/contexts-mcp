@@ -114,7 +114,7 @@ export function layout(title: string, body: string): string {
       var raw = localStorage.getItem('contexts-style');
       if (raw) {
         var s = JSON.parse(raw);
-        ['accent', 'palette', 'corners', 'chrome', 'motion', 'complement', 'width'].forEach(function(k) {
+        ['accent', 'palette', 'corners', 'chrome', 'motion', 'complement', 'width', 'fontsize'].forEach(function(k) {
           if (s && typeof s[k] === 'string' && s[k].length > 0) {
             root.setAttribute('data-' + k, s[k]);
           }
@@ -289,7 +289,7 @@ export function layout(title: string, body: string): string {
   })();
   (function() {
     var root = document.documentElement;
-    var STYLE_KEYS = ['accent', 'palette', 'corners', 'chrome', 'motion', 'complement', 'width'];
+    var STYLE_KEYS = ['accent', 'palette', 'corners', 'chrome', 'motion', 'complement', 'width', 'fontsize'];
     function applyTheme() {
       var isLight = localStorage.getItem('contexts-theme') === 'light';
       if (isLight) root.setAttribute('data-theme', 'light');
@@ -877,9 +877,14 @@ export function itemViewPage(
 }
 
 // Self-contained vanilla-canvas force-directed graph. No deps. Reads /graph.json,
-// simulates repulsion + edge springs + gravity, draws nodes (sized by degree) and
-// edges (solid = explicit link, dashed = semantically related), supports drag and
-// click-to-open. Colours pulled from the live CRT theme variables.
+// simulates repulsion + edge springs + gravity in an unbounded WORLD space, then
+// views it through a pan/zoom camera (wheel zooms toward the cursor, drag empty
+// space to pan, drag a node to move it, click to open). Nodes are sized by degree;
+// solid edges are explicit links, dashed edges semantically related. Hovering a
+// node focuses it (its neighbourhood stays lit, the rest dims). Labels are placed
+// greedily with collision avoidance — highest-degree first — so they never overlap
+// and progressively reveal as you zoom in and nodes spread apart. Colours come from
+// the live CRT theme variables.
 const GRAPH_SCRIPT = `
 (function(){
   var canvas = document.getElementById('graph-canvas');
@@ -890,7 +895,9 @@ const GRAPH_SCRIPT = `
   var DPR = Math.min(window.devicePixelRatio || 1, 2);
   var W = 800, H = 480;
   function resize(){
-    W = wrap.clientWidth || 800; H = Math.max(420, Math.round(window.innerHeight * 0.62));
+    var top = wrap.getBoundingClientRect().top;
+    W = wrap.clientWidth || 800;
+    H = Math.max(440, Math.round(window.innerHeight - top - 20));
     canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
     canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
     ctx.setTransform(DPR,0,0,DPR,0,0);
@@ -898,29 +905,44 @@ const GRAPH_SCRIPT = `
   var cs = getComputedStyle(document.documentElement);
   function v(name, fb){ var x = cs.getPropertyValue(name).trim(); return x || fb; }
   var ACCENT = v('--accent','#4ade80'), MUTED = v('--text-muted','#7d8491'),
-      DIM = v('--text-dim','#5a6070'), BRIGHT = v('--text-bright','#e6e8ec');
-  var nodes = [], edges = [], byId = {}, colorOf = {}, hover = null, drag = null, moved = false, filter = '';
-  function nodeR(n){ return 4 + Math.min(11, n.degree * 1.6); }
+      DIM = v('--text-dim','#5a6070'), BRIGHT = v('--text-bright','#e6e8ec'),
+      BG = v('--bg','#0c0e12');
+  var nodes = [], edges = [], byId = {}, colorOf = {},
+      hover = null, drag = null, moved = false, filter = '',
+      panning = false, panSX = 0, panSY = 0, panCX = 0, panCY = 0;
+  // Camera: cam.x/cam.y is the WORLD point shown at the centre of the canvas.
+  var cam = { x: 0, y: 0, scale: 1 };
+  function clamp(x, lo, hi){ return x < lo ? lo : (x > hi ? hi : x); }
+  function baseR(n){ return 4 + Math.min(11, n.degree * 1.6); }
+  function rScreen(n){ return clamp(baseR(n) * cam.scale, 2.5, 30); }
+  function sx(wx){ return (wx - cam.x) * cam.scale + W/2; }
+  function sy(wy){ return (wy - cam.y) * cam.scale + H/2; }
+  function toWorldX(px){ return (px - W/2) / cam.scale + cam.x; }
+  function toWorldY(py){ return (py - H/2) / cam.scale + cam.y; }
 
   resize();
   fetch('/graph.json' + (window.location.search || '')).then(function(r){ return r.json(); }).then(function(g){
     if (!g.nodes || !g.nodes.length){ if(empty) empty.style.display='block'; return; }
-    var ns = g.nodes.slice().sort(function(a,b){ return b.degree-a.degree; }).slice(0, 200);
+    var ns = g.nodes.slice().sort(function(a,b){ return b.degree-a.degree; }).slice(0, 240);
     var ok = {}; ns.forEach(function(n){ ok[n.id]=true; });
     nodes = ns.map(function(n,i){
+      // Phyllotaxis seed — spreads the initial layout so the sim relaxes cleanly
+      // instead of exploding out of a single overlapping pile at the origin.
+      var a = i * 2.399963, rad = Math.sqrt(i) * 34;
       return { id:n.id, label:(n.title||n.item), context:n.context, item:n.item, degree:n.degree,
-        x: W/2 + Math.cos(i*2.4)*140 + (i%7-3)*16, y: H/2 + Math.sin(i*2.4)*120 + (i%5-2)*16,
-        vx:0, vy:0, fixed:false };
+        x: Math.cos(a)*rad, y: Math.sin(a)*rad, vx:0, vy:0, fixed:false, adj:{} };
     });
     nodes.forEach(function(n){ byId[n.id]=n; });
     var ctxs = [];
     nodes.forEach(function(n){ if (ctxs.indexOf(n.context) < 0) ctxs.push(n.context); });
     ctxs.sort();
-    ctxs.forEach(function(c,k){ colorOf[c] = 'hsl(' + Math.round(k*360/Math.max(1,ctxs.length)) + ',55%,62%)'; });
+    ctxs.forEach(function(c,k){ colorOf[c] = 'hsl(' + Math.round(k*360/Math.max(1,ctxs.length)) + ',58%,62%)'; });
     var leg = document.getElementById('graph-ctx-legend');
     if (leg){ leg.innerHTML = ctxs.map(function(c){ return '<span class="cl-ctx"><i style="background:'+colorOf[c]+'"></i>'+c.replace(/[<>&"]/g,'')+'</span>'; }).join(''); }
     edges = (g.edges||[]).filter(function(e){ return ok[e.source] && ok[e.target]; })
-      .map(function(e){ return { s:byId[e.source], t:byId[e.target], kind:e.kind }; });
+      .map(function(e){ var s=byId[e.source], t=byId[e.target]; s.adj[t.id]=1; t.adj[s.id]=1; return { s:s, t:t, kind:e.kind }; });
+    for (var w=0; w<320; w++) step();   // warm the layout off-screen so the first paint is settled
+    fitView(70);
     requestAnimationFrame(loop);
   }).catch(function(){ if(empty){ empty.textContent='Could not load the graph.'; empty.style.display='block'; } });
 
@@ -930,70 +952,173 @@ const GRAPH_SCRIPT = `
       for (var j=i+1;j<nodes.length;j++){
         var b = nodes[j];
         var dx=a.x-b.x, dy=a.y-b.y, d2=dx*dx+dy*dy||0.01, d=Math.sqrt(d2);
-        var f=1500/d2, fx=dx/d*f, fy=dy/d*f;
+        var f=2600/d2, fx=dx/d*f, fy=dy/d*f;
         a.vx+=fx; a.vy+=fy; b.vx-=fx; b.vy-=fy;
       }
     }
     for (var e=0;e<edges.length;e++){
       var ed=edges[e], ex=ed.t.x-ed.s.x, ey=ed.t.y-ed.s.y, el=Math.sqrt(ex*ex+ey*ey)||0.01;
-      var rest = ed.kind==='link'?72:130, k = ed.kind==='link'?0.02:0.008;
+      var rest = ed.kind==='link'?78:150, k = ed.kind==='link'?0.022:0.009;
       var ef=(el-rest)*k, efx=ex/el*ef, efy=ey/el*ef;
       ed.s.vx+=efx; ed.s.vy+=efy; ed.t.vx-=efx; ed.t.vy-=efy;
     }
     for (var n=0;n<nodes.length;n++){
       var p=nodes[n];
       if (p.fixed){ p.vx=0; p.vy=0; continue; }
-      p.vx += (W/2-p.x)*0.0025; p.vy += (H/2-p.y)*0.0025;
-      p.vx*=0.85; p.vy*=0.85; p.x+=p.vx; p.y+=p.vy;
-      p.x=Math.max(14,Math.min(W-14,p.x)); p.y=Math.max(14,Math.min(H-14,p.y));
+      // Gentle gravity toward the world origin keeps the (unbounded) layout from
+      // drifting; damping + a velocity cap keep it from ever flying apart.
+      p.vx += (0-p.x)*0.0020; p.vy += (0-p.y)*0.0020;
+      p.vx*=0.86; p.vy*=0.86;
+      p.vx=clamp(p.vx,-40,40); p.vy=clamp(p.vy,-40,40);
+      p.x+=p.vx; p.y+=p.vy;
     }
   }
+
+  // Frame the whole graph in the viewport with a little padding.
+  function fitView(pad){
+    if (!nodes.length) return;
+    var minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9;
+    for (var i=0;i<nodes.length;i++){ var n=nodes[i];
+      if(n.x<minx)minx=n.x; if(n.x>maxx)maxx=n.x; if(n.y<miny)miny=n.y; if(n.y>maxy)maxy=n.y; }
+    var gw=Math.max(1,maxx-minx), gh=Math.max(1,maxy-miny);
+    pad = (pad==null)?70:pad;
+    cam.scale = clamp(Math.min((W-pad*2)/gw,(H-pad*2)/gh), 0.2, 2.2);
+    cam.x = (minx+maxx)/2; cam.y = (miny+maxy)/2;
+  }
+
   function matches(n){ return !filter || String(n.label).toLowerCase().indexOf(filter)>=0 || String(n.context).toLowerCase().indexOf(filter)>=0; }
+  function onScreen(n){ var x=sx(n.x), y=sy(n.y); return x>-40 && x<W+40 && y>-40 && y<H+40; }
+
   function draw(){
     ctx.clearRect(0,0,W,H);
+    // Edges
     for (var e=0;e<edges.length;e++){
       var ed=edges[e];
-      var edim = filter && !(matches(ed.s) || matches(ed.t));
-      ctx.beginPath(); ctx.moveTo(ed.s.x,ed.s.y); ctx.lineTo(ed.t.x,ed.t.y);
-      if (ed.kind==='link'){ ctx.strokeStyle=MUTED; ctx.globalAlpha= edim?0.06:0.5; ctx.lineWidth=1; ctx.setLineDash([]); }
-      else { ctx.strokeStyle=DIM; ctx.globalAlpha= edim?0.05:0.4; ctx.lineWidth=1; ctx.setLineDash([3,3]); }
-      ctx.stroke(); ctx.globalAlpha=1; ctx.setLineDash([]);
+      var connHover = hover && (ed.s===hover || ed.t===hover);
+      var dimF = filter && !(matches(ed.s) || matches(ed.t));
+      var dimH = hover && !connHover;
+      var alpha = ed.kind==='link'?0.5:0.4;
+      if (dimF) alpha = 0.04;
+      else if (dimH) alpha = 0.05;
+      else if (connHover) alpha = ed.kind==='link'?0.85:0.7;
+      ctx.beginPath(); ctx.moveTo(sx(ed.s.x),sy(ed.s.y)); ctx.lineTo(sx(ed.t.x),sy(ed.t.y));
+      ctx.strokeStyle = ed.kind==='link'?MUTED:DIM;
+      ctx.globalAlpha = alpha;
+      ctx.lineWidth = connHover?1.6:1;
+      ctx.setLineDash(ed.kind==='link'?[]:[3,3]);
+      ctx.stroke();
     }
+    ctx.globalAlpha=1; ctx.setLineDash([]);
+    // Nodes (cull off-screen)
     for (var i=0;i<nodes.length;i++){
-      var n=nodes[i], r=nodeR(n);
-      ctx.globalAlpha = (filter && !matches(n)) ? 0.13 : 1;
-      ctx.beginPath(); ctx.arc(n.x,n.y,r,0,Math.PI*2);
+      var n=nodes[i];
+      if (!onScreen(n)) continue;
+      var r=rScreen(n);
+      var dim = (filter && !matches(n)) || (hover && n!==hover && !hover.adj[n.id]);
+      ctx.globalAlpha = dim?0.16:1;
+      ctx.beginPath(); ctx.arc(sx(n.x),sy(n.y),r,0,Math.PI*2);
       ctx.fillStyle = (n===hover)?BRIGHT:(colorOf[n.context]||ACCENT); ctx.fill();
-      if (n===hover){ ctx.lineWidth=1.5; ctx.strokeStyle=(colorOf[n.context]||ACCENT); ctx.stroke(); }
-      ctx.globalAlpha = 1;
+      if (n===hover){ ctx.lineWidth=1.6; ctx.strokeStyle=(colorOf[n.context]||ACCENT); ctx.stroke(); }
     }
-    ctx.font='10px "IBM Plex Mono", monospace'; ctx.textAlign='left'; ctx.textBaseline='middle';
-    for (var l=0;l<nodes.length;l++){
-      var m=nodes[l];
-      var show = (m===hover) || (filter ? matches(m) : m.degree>=3);
-      if (show){
-        ctx.fillStyle = (m===hover)?BRIGHT:MUTED;
-        ctx.fillText(String(m.label).slice(0,28), m.x + nodeR(m) + 5, m.y);
-      }
-    }
+    ctx.globalAlpha=1;
+    drawLabels();
   }
-  var frames=0;
-  function loop(){ step(); draw(); frames++; requestAnimationFrame(loop); }
 
-  function at(mx,my){ for (var i=nodes.length-1;i>=0;i--){ var n=nodes[i],dx=mx-n.x,dy=my-n.y; if (dx*dx+dy*dy<=Math.pow(nodeR(n)+5,2)) return n; } return null; }
+  // priority: 3 = hovered, 2 = neighbour-of-hover or filter match, 1 = idle
+  // (collision-avoidance decides), 0 = suppressed while focusing/filtering.
+  function priority(n){
+    if (n===hover) return 3;
+    if (hover) return hover.adj[n.id] ? 2 : 0;
+    if (filter) return matches(n) ? 2 : 0;
+    return 1;
+  }
+
+  // While idle (no hover/filter), cap how many labels show and raise that cap as
+  // you zoom in. Candidates are sorted by degree, so a wide view labels only the
+  // hubs; labels progressively reveal as you zoom and nodes spread apart. (A flat
+  // degree cutoff is useless here — almost every node is mid-degree — so a count
+  // budget, paired with collision avoidance, is what actually thins the view.)
+  function idleBudget(){
+    var s=cam.scale;
+    if (s < 0.55) return 10;
+    if (s < 0.85) return 20;
+    if (s < 1.25) return 38;
+    if (s < 1.8) return 66;
+    return 9999; // zoomed in close — collision avoidance alone governs
+  }
+
+  function drawLabels(){
+    ctx.font='12px "IBM Plex Mono", monospace'; ctx.textAlign='left'; ctx.textBaseline='middle';
+    var idle = !hover && !filter, budget = idle ? idleBudget() : 9999, shown = 0;
+    var cand = [];
+    for (var i=0;i<nodes.length;i++){ if (onScreen(nodes[i])) cand.push(nodes[i]); }
+    cand.sort(function(a,b){ var pa=priority(a), pb=priority(b); return pa!==pb ? pb-pa : b.degree-a.degree; });
+    var placed = [];
+    ctx.shadowColor = BG; ctx.shadowBlur = 4;
+    for (var c=0;c<cand.length;c++){
+      var n=cand[c], pri=priority(n), force=(n===hover);
+      if (!force && pri < 1) continue;
+      var text = String(n.label); if (text.length>30) text = text.slice(0,29)+'\\u2026';
+      var w = ctx.measureText(text).width;
+      var x = sx(n.x) + rScreen(n) + 5, y = sy(n.y);
+      var rect = { x:x, y:y-7, w:w, h:14 };
+      if (!force){
+        var hit=false;
+        for (var p=0;p<placed.length;p++){ var q=placed[p];
+          if (rect.x<q.x+q.w && rect.x+rect.w>q.x && rect.y<q.y+q.h && rect.y+rect.h>q.y){ hit=true; break; } }
+        if (hit) continue;
+      }
+      placed.push(rect);
+      ctx.fillStyle = (priority(n)>=2 || n===hover) ? BRIGHT : MUTED;
+      ctx.fillText(text, x, y);
+      if (idle && ++shown >= budget) break;
+    }
+    ctx.shadowBlur = 0;
+  }
+
+  function loop(){ step(); draw(); requestAnimationFrame(loop); }
+
+  function at(mx,my){
+    for (var i=nodes.length-1;i>=0;i--){ var n=nodes[i];
+      var dx=mx-sx(n.x), dy=my-sy(n.y), rr=rScreen(n)+4;
+      if (dx*dx+dy*dy<=rr*rr) return n; }
+    return null;
+  }
   function pos(ev){ var rc=canvas.getBoundingClientRect(); return { x:ev.clientX-rc.left, y:ev.clientY-rc.top }; }
+
   canvas.addEventListener('mousemove', function(ev){
     var p=pos(ev);
-    if (drag){ drag.x=p.x; drag.y=p.y; drag.fixed=true; moved=true; }
-    else { hover=at(p.x,p.y); canvas.style.cursor=hover?'pointer':'default'; }
+    if (drag){ drag.x=toWorldX(p.x); drag.y=toWorldY(p.y); drag.fixed=true; moved=true; }
+    else if (panning){ cam.x = panCX - (p.x-panSX)/cam.scale; cam.y = panCY - (p.y-panSY)/cam.scale; }
+    else { hover=at(p.x,p.y); canvas.style.cursor=hover?'pointer':'grab'; }
   });
-  canvas.addEventListener('mousedown', function(ev){ var p=pos(ev); drag=at(p.x,p.y); moved=false; });
-  window.addEventListener('mouseup', function(ev){
-    if (!drag) return;
+  canvas.addEventListener('mousedown', function(ev){
     var p=pos(ev), n=at(p.x,p.y);
-    if (!moved && n===drag){ window.location.href='/ctx/'+encodeURIComponent(drag.context)+'/'+encodeURIComponent(drag.item); }
-    drag.fixed=false; drag=null;
+    if (n){ drag=n; moved=false; }
+    else { panning=true; panSX=p.x; panSY=p.y; panCX=cam.x; panCY=cam.y; canvas.style.cursor='grabbing'; }
   });
+  window.addEventListener('mouseup', function(ev){
+    if (drag){
+      var p=pos(ev), n=at(p.x,p.y);
+      if (!moved && n===drag){ window.location.href='/ctx/'+encodeURIComponent(drag.context)+'/'+encodeURIComponent(drag.item); }
+      drag.fixed=false; drag=null;
+    }
+    panning=false; canvas.style.cursor='grab';
+  });
+  canvas.addEventListener('wheel', function(ev){
+    ev.preventDefault();
+    var p=pos(ev), wx=toWorldX(p.x), wy=toWorldY(p.y);
+    cam.scale = clamp(cam.scale * Math.pow(1.0016, -ev.deltaY), 0.15, 6);
+    cam.x = wx - (p.x-W/2)/cam.scale; cam.y = wy - (p.y-H/2)/cam.scale;
+  }, { passive:false });
+  canvas.addEventListener('dblclick', function(ev){ var p=pos(ev); if(!at(p.x,p.y)) fitView(70); });
+
+  function zoomBy(f){ cam.scale = clamp(cam.scale*f, 0.15, 6); }
+  var zi=document.getElementById('graph-zoom-in'), zo=document.getElementById('graph-zoom-out'), zf=document.getElementById('graph-fit');
+  if (zi) zi.addEventListener('click', function(){ zoomBy(1.3); });
+  if (zo) zo.addEventListener('click', function(){ zoomBy(1/1.3); });
+  if (zf) zf.addEventListener('click', function(){ fitView(70); });
+
   var fin = document.getElementById('graph-filter');
   if (fin) fin.addEventListener('input', function(){ filter = fin.value.trim().toLowerCase(); });
   window.addEventListener('resize', resize);
@@ -1012,11 +1137,16 @@ export function graphPage(includeArchived = false, scopeCtx = ""): string {
     `
     <div class="breadcrumb"><a href="/">Contexts</a> / <strong>Graph</strong>${scopeCtx ? ` / <span style="color:var(--text-dim);">${esc(scopeCtx)}</span>` : ""}</div>
     <h2>Context Graph${scopeCtx ? ` &mdash; ${esc(scopeCtx)}` : ""}</h2>
-    <p class="graph-intro">${scopeCtx ? `Items in <strong>${esc(scopeCtx)}</strong> and their direct connections. ` : "Every item is a node. "}Solid edges are explicit links; dashed edges are semantically related items. Drag to rearrange, click a node to open it.${scopeCtx ? ` <a href="/graph${includeArchived ? "?archived=1" : ""}">View full graph</a>.` : ""}</p>
+    <p class="graph-intro">${scopeCtx ? `Items in <strong>${esc(scopeCtx)}</strong> and their direct connections. ` : "Every item is a node. "}Solid edges are explicit links; dashed edges are semantically related items. <span class="graph-hint">Scroll to zoom, drag empty space to pan, drag a node to move it, click to open. Hover a node to focus its neighbourhood.</span>${scopeCtx ? ` <a href="/graph${includeArchived ? "?archived=1" : ""}">View full graph</a>.` : ""}</p>
     <input type="text" id="graph-filter" class="graph-filter" placeholder="Filter nodes by title or context…" autocomplete="off">
     <a class="graph-archived-toggle" href="/graph${qstr(!includeArchived)}">${includeArchived ? "Hide archived" : "Show archived"}</a>
     <div id="graph-wrap">
       <canvas id="graph-canvas"></canvas>
+      <div class="graph-controls" aria-hidden="true">
+        <button type="button" id="graph-zoom-in" title="Zoom in">+</button>
+        <button type="button" id="graph-fit" title="Fit graph to view">&#9633;</button>
+        <button type="button" id="graph-zoom-out" title="Zoom out">&minus;</button>
+      </div>
       <div id="graph-empty" class="empty" style="display:none;">No items to graph yet.</div>
     </div>
     <div class="graph-legend"><span class="lg-link">&mdash; linked</span><span class="lg-rel">&middot;&middot;&middot; related</span></div>
@@ -1260,12 +1390,24 @@ export function themeLabPage(): string {
       ${knobRow("complement", "Complement")}
     </div>
 
+    <h3 class="theme-section">Text size</h3>
+    <div class="theme-knobs">
+      <fieldset class="theme-knob">
+        <legend>Scale</legend>
+        <div class="knob-row">
+          <button type="button" class="sort-tab" data-fontsize-set="default">default</button>
+          <button type="button" class="sort-tab" data-fontsize-set="compact">compact</button>
+          <button type="button" class="sort-tab" data-fontsize-set="small">small</button>
+        </div>
+      </fieldset>
+    </div>
+
     <div class="theme-actions">
       <button type="button" class="btn btn-primary" id="theme-scramble">Scramble</button>
       <button type="button" class="btn" id="theme-reset">Reset to default</button>
     </div>
 
-    <p class="theme-footnote">Preset sets every knob at once. Scramble randomizes every knob. Keep it or scramble again.</p>
+    <p class="theme-footnote">Preset sets every knob at once. Scramble randomizes every knob — text size and width are left alone. Keep it or scramble again.</p>
 
     <script>
     (function() {
@@ -1413,6 +1555,31 @@ export function themeLabPage(): string {
       });
 
       document.getElementById('theme-reset').addEventListener('click', resetAll);
+
+      // Text size — a standalone preference like 'width': persisted in the same
+      // localStorage blob under 'fontsize', applied as data-fontsize, and
+      // DELIBERATELY not a theme DIMENSION, so Scramble and Reset never touch it.
+      var fontsizeBtns = Array.prototype.slice.call(document.querySelectorAll('[data-fontsize-set]'));
+      function currentFs() { return root.getAttribute('data-fontsize') || 'default'; }
+      function reflectFs() {
+        var cur = currentFs();
+        fontsizeBtns.forEach(function(b) { b.classList.toggle('active', b.dataset.fontsizeSet === cur); });
+      }
+      function setFontsize(v) {
+        if (v === 'default') root.removeAttribute('data-fontsize');
+        else root.setAttribute('data-fontsize', v);
+        try {
+          var raw = localStorage.getItem(KEY);
+          var s = raw ? JSON.parse(raw) : {};
+          if (v === 'default') delete s.fontsize; else s.fontsize = v;
+          localStorage.setItem(KEY, JSON.stringify(s));
+        } catch (e) {}
+        reflectFs();
+      }
+      fontsizeBtns.forEach(function(b) {
+        b.addEventListener('click', function() { setFontsize(b.dataset.fontsizeSet); });
+      });
+      reflectFs();
 
       reflect(readCurrent());
     })();

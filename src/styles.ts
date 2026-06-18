@@ -24,7 +24,15 @@ export const styles = `
       --container-shadow: rgba(0,0,0,0.25);
       --sticky-header-h: 2.9rem;
       --sticky-crumb-h: 2.25rem;
+      --font-scale: 1;
     }
+
+    /* Text size — multiplies ONLY the text font-sizes (body + article); the
+       rem-based layout/spacing is left untouched, so the UI keeps its size and
+       just the type shrinks. Standalone preference (data-fontsize), excluded
+       from Scramble and from Reset (like the width setting). */
+    :root[data-fontsize="compact"] { --font-scale: 0.9; }
+    :root[data-fontsize="small"]   { --font-scale: 0.82; }
 
     :root[data-theme="light"] {
       --bg: #f5efe0; --surface: #ece5d3; --surface-raised: #e0d8c2;
@@ -261,7 +269,7 @@ export const styles = `
 
     body {
       font-family: 'IBM Plex Mono', 'Courier New', monospace;
-      font-size: 14px; font-weight: 400; letter-spacing: 0.01em;
+      font-size: calc(14px * var(--font-scale)); font-weight: 400; letter-spacing: 0.01em;
       background: var(--body-bg); color: var(--text); line-height: 1.7;
     }
 
@@ -628,7 +636,7 @@ export const styles = `
        capped here — it stays governed by the width selector. */
     .doc-content {
       font-family: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-      font-size: 15px; line-height: 1.7; letter-spacing: 0;
+      font-size: calc(15px * var(--font-scale)); line-height: 1.7; letter-spacing: 0;
     }
     .doc-content h1, .doc-content h2, .doc-content h3 {
       font-family: 'IBM Plex Mono', 'Courier New', monospace; font-weight: 600;
@@ -893,9 +901,14 @@ export const styles = `
     .doc-connections-inline .conn-ctx { color: var(--text-dim); font-size: 0.7rem; margin-left: 0.5rem; }
 
     /* Context graph page */
-    #graph-wrap { position: relative; margin-top: 1rem; border: 1px solid var(--border); background: var(--bg); overflow: hidden; }
-    #graph-canvas { display: block; width: 100%; cursor: default; }
+    #graph-wrap { position: relative; margin-top: 1rem; min-height: 60vh; border: 1px solid var(--border); background: var(--bg); overflow: hidden; }
+    #graph-canvas { display: block; width: 100%; cursor: grab; touch-action: none; }
+    #graph-canvas:active { cursor: grabbing; }
+    .graph-controls { position: absolute; top: 0.6rem; right: 0.6rem; display: flex; flex-direction: column; gap: 0.3rem; z-index: 2; }
+    .graph-controls button { width: 1.9rem; height: 1.9rem; display: flex; align-items: center; justify-content: center; font-size: 1rem; line-height: 1; color: var(--text-muted); background: color-mix(in srgb, var(--bg) 78%, transparent); border: 1px solid var(--border); border-radius: 3px; cursor: pointer; padding: 0; transition: color 120ms, border-color 120ms; }
+    .graph-controls button:hover { color: var(--text-bright); border-color: var(--accent-line-hover); }
     .graph-intro { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.5rem; }
+    .graph-hint { color: var(--text-dim); }
     .graph-filter { width: 100%; max-width: 22rem; margin-bottom: 0.6rem; }
     .graph-archived-toggle { display: inline-block; margin-left: 0.75rem; font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; }
     .graph-archived-toggle:hover { color: var(--text-muted); }
