@@ -645,9 +645,13 @@ export const styles = `
     }
     .doc-content h1:first-child, .doc-content h2:first-child { margin-top: 0; }
     .doc-content p { margin-bottom: 1.1rem; }
+    /* Inline code: kept deliberately quiet — no border, minimal padding, just a
+       faint tint. The mono-vs-sans contrast already marks it as code, so it does
+       not need a heavy bordered pill on every token. (Code BLOCKS are unchanged
+       — see .doc-content pre.) */
     .doc-content code {
-      background: var(--code-bg); padding: 0.15rem 0.4rem; font-size: 0.85em;
-      border: 1px solid var(--border); font-family: 'IBM Plex Mono', monospace;
+      background: var(--surface-raised); padding: 0.08em 0.32em; font-size: 0.88em;
+      border: none; font-family: 'IBM Plex Mono', monospace;
     }
     .doc-content pre {
       background: var(--pre-bg); padding: 1rem; overflow-x: auto; margin-bottom: 1rem;
