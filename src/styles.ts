@@ -629,6 +629,15 @@ export const styles = `
       border-color: var(--text-muted); border-bottom-color: var(--text-bright); background: var(--input-bg-focus);
     }
     .rt-editor .ProseMirror { outline: none; }
+    /* TipTap task lists use <ul data-type="taskList"> with the checkbox inside a
+       <label> (not a direct <li> child like the marked/GFM view output), so the
+       view-mode bullet-suppression rule misses them — strip the bullet and lay
+       the checkbox beside the text here. */
+    .rt-editor ul[data-type="taskList"] { list-style: none; padding-left: 0; margin-left: 0; }
+    .rt-editor ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 0.5rem; margin-bottom: 0.3rem; }
+    .rt-editor ul[data-type="taskList"] li > label { flex: 0 0 auto; margin-top: 0.2rem; user-select: none; }
+    .rt-editor ul[data-type="taskList"] li > div { flex: 1 1 auto; }
+    .rt-editor ul[data-type="taskList"] li > div > p { margin: 0; }
 
     /* --- Empty --- */
     .empty {
