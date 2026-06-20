@@ -1230,6 +1230,140 @@ export function graphPage(includeArchived = false, scopeCtx = ""): string {
   );
 }
 
+// Edit-page-only client script. Lazily pulls TipTap from esm.sh on first entry
+// to rich mode (editing is rare; nothing here loads on view pages), mounts a
+// rich editor over the markdown body, and serializes back to markdown on
+// save/toggle. The raw <textarea> stays the data source and the fallback if the
+// CDN/parse fails. No backticks or ${} inside — this string is interpolated into
+// a template literal — and no literal backslash (BS via fromCharCode) so the
+// wiki-link un-escape stays readable.
+const EDITOR_SCRIPT = `
+(function(){
+  var form = document.getElementById('rt-form');
+  var ta = document.getElementById('content');
+  if (!form || !ta) return;
+  var wrap = document.getElementById('rt-wrap');
+  var mount = document.getElementById('rt-editor');
+  var loader = document.getElementById('rt-loader');
+  var toolbar = document.getElementById('rt-toolbar');
+  var toggle = document.getElementById('rt-toggle');
+  var note = document.getElementById('rt-note');
+
+  var V = '2';
+  var deps = '?deps=@tiptap/core@2';
+  var BASE = 'https://esm.sh/';
+  var BS = String.fromCharCode(92);
+  var M = null, editor = null, mode = 'raw';
+
+  // tiptap-markdown escapes [ and ] (CommonMark-correct), turning our
+  // [[wiki-links]] into escaped brackets. Drop any backslash that escapes a
+  // square bracket on the way out so graph links survive. Raw-mode text never
+  // passes through here, so hand-typed escapes are left alone.
+  function unesc(md){
+    var out = '';
+    for (var i = 0; i < md.length; i++){
+      var c = md.charAt(i), n = md.charAt(i + 1);
+      if (c === BS && (n === '[' || n === ']')) continue;
+      out += c;
+    }
+    return out;
+  }
+  function serialize(){ return editor ? unesc(editor.storage.markdown.getMarkdown()) : ta.value; }
+
+  function loadMods(){
+    if (M) return Promise.resolve(M);
+    return Promise.all([
+      import(BASE + '@tiptap/core@' + V),
+      import(BASE + '@tiptap/starter-kit@' + V + deps),
+      import(BASE + '@tiptap/extension-link@' + V + deps),
+      import(BASE + '@tiptap/extension-image@' + V + deps),
+      import(BASE + '@tiptap/extension-table@' + V + deps),
+      import(BASE + '@tiptap/extension-table-row@' + V + deps),
+      import(BASE + '@tiptap/extension-table-cell@' + V + deps),
+      import(BASE + '@tiptap/extension-table-header@' + V + deps),
+      import(BASE + '@tiptap/extension-task-list@' + V + deps),
+      import(BASE + '@tiptap/extension-task-item@' + V + deps),
+      import(BASE + 'tiptap-markdown@0.8' + deps)
+    ]).then(function(m){
+      M = { Editor:m[0].Editor, StarterKit:m[1].default, Link:m[2].default, Image:m[3].default,
+        Table:m[4].default, TableRow:m[5].default, TableCell:m[6].default, TableHeader:m[7].default,
+        TaskList:m[8].default, TaskItem:m[9].default, Markdown:m[10].Markdown };
+      return M;
+    });
+  }
+
+  function build(md){
+    return new M.Editor({
+      element: mount,
+      editorProps: { attributes: { class: 'doc-content' } },
+      extensions: [
+        M.StarterKit, M.Link.configure({ openOnClick:false }), M.Image,
+        M.Table.configure({ resizable:false }), M.TableRow, M.TableCell, M.TableHeader,
+        M.TaskList, M.TaskItem.configure({ nested:true }),
+        M.Markdown.configure({ html:false, transformPastedText:true, transformCopiedText:true })
+      ],
+      content: md
+    });
+  }
+
+  function showRich(){
+    loader.style.display = 'none'; toolbar.hidden = false; mount.style.display = '';
+    ta.style.display = 'none'; wrap.hidden = false; toggle.textContent = 'edit raw markdown'; mode = 'rich';
+  }
+  function showRaw(){ wrap.hidden = true; ta.style.display = ''; toggle.textContent = 'edit rich text'; mode = 'raw'; }
+
+  function enterRich(){
+    wrap.hidden = false; toolbar.hidden = true; mount.style.display = 'none';
+    loader.style.display = ''; ta.style.display = 'none';
+    loadMods().then(function(){
+      if (editor) editor.destroy();
+      editor = build(ta.value);
+      wireToolbar();
+      showRich();
+    }).catch(function(){
+      loader.style.display = 'none'; wrap.hidden = true; ta.style.display = ''; mode = 'raw';
+      toggle.textContent = 'edit rich text';
+      if (note){ note.hidden = false; note.textContent = 'rich editor unavailable - editing raw markdown'; }
+    });
+  }
+  function enterRaw(){ if (editor) ta.value = serialize(); showRaw(); }
+
+  toggle.addEventListener('click', function(){ if (mode === 'rich') enterRaw(); else enterRich(); });
+  form.addEventListener('submit', function(){ if (mode === 'rich' && editor) ta.value = serialize(); });
+
+  function run(make){ if (editor) make(editor.chain().focus()).run(); }
+  function wireToolbar(){
+    if (toolbar.getAttribute('data-wired')) return;
+    toolbar.setAttribute('data-wired', '1');
+    var map = [
+      ['rt-bold', function(c){ return c.toggleBold(); }],
+      ['rt-italic', function(c){ return c.toggleItalic(); }],
+      ['rt-h1', function(c){ return c.toggleHeading({ level:1 }); }],
+      ['rt-h2', function(c){ return c.toggleHeading({ level:2 }); }],
+      ['rt-ul', function(c){ return c.toggleBulletList(); }],
+      ['rt-ol', function(c){ return c.toggleOrderedList(); }],
+      ['rt-quote', function(c){ return c.toggleBlockquote(); }],
+      ['rt-code', function(c){ return c.toggleCodeBlock(); }]
+    ];
+    map.forEach(function(pair){
+      var b = document.getElementById(pair[0]);
+      if (b) b.addEventListener('click', function(){ run(pair[1]); });
+    });
+    var lk = document.getElementById('rt-link');
+    if (lk) lk.addEventListener('click', function(){
+      if (!editor) return;
+      var url = window.prompt('link url');
+      if (url === null) return;
+      if (url === '') editor.chain().focus().unsetLink().run();
+      else editor.chain().focus().setLink({ href: url }).run();
+    });
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', enterRich);
+  else enterRich();
+})();
+`;
+
 export function itemEditPage(
   context: string,
   name: string,
@@ -1252,6 +1386,30 @@ export function itemEditPage(
       </div>`
     : `<div class="meta" style="margin-bottom:0.75rem;">Kind: ${extension.toUpperCase()} &middot; title and tags are markdown-only.</div>`;
 
+  const richArea = isMarkdown
+    ? `
+      <div id="rt-note" class="meta" hidden style="margin-bottom:0.5rem;"></div>
+      <div id="rt-wrap" hidden>
+        <div id="rt-toolbar" class="rt-toolbar" hidden>
+          <button type="button" id="rt-bold" class="rt-btn" title="Bold (Ctrl+B)"><b>B</b></button>
+          <button type="button" id="rt-italic" class="rt-btn" title="Italic (Ctrl+I)"><i>I</i></button>
+          <button type="button" id="rt-h1" class="rt-btn" title="Heading 1">H1</button>
+          <button type="button" id="rt-h2" class="rt-btn" title="Heading 2">H2</button>
+          <button type="button" id="rt-ul" class="rt-btn" title="Bullet list">&bull;</button>
+          <button type="button" id="rt-ol" class="rt-btn" title="Numbered list">1.</button>
+          <button type="button" id="rt-quote" class="rt-btn" title="Blockquote">&ldquo;&rdquo;</button>
+          <button type="button" id="rt-code" class="rt-btn" title="Code block">&lt;/&gt;</button>
+          <button type="button" id="rt-link" class="rt-btn" title="Link">link</button>
+        </div>
+        <div id="rt-loader" class="rt-loader">preparing editor&hellip;</div>
+        <div id="rt-editor" class="rt-editor"></div>
+      </div>`
+    : "";
+
+  const toggleBtn = isMarkdown
+    ? `<button type="button" id="rt-toggle" class="btn">edit raw markdown</button>`
+    : "";
+
   return layout(
     `Edit ${title}`,
     `
@@ -1259,15 +1417,17 @@ export function itemEditPage(
       <a href="/">Contexts</a> / <a href="/ctx/${esc(context)}">${esc(context)}</a> / <a href="/ctx/${esc(context)}/${esc(name)}?ext=${esc(extension)}">${esc(name)}.${esc(extension)}</a> / <strong>Edit</strong>
     </div>
     <h2>Edit: ${esc(title)}</h2>
-    <form method="POST" action="/ctx/${esc(context)}/${esc(name)}/edit?ext=${esc(extension)}" style="margin-top:1rem;">
+    <form id="rt-form" method="POST" action="/ctx/${esc(context)}/${esc(name)}/edit?ext=${esc(extension)}" style="margin-top:1rem;">
       ${mdFields}
       <label for="content">Content</label>
+      ${richArea}
       <textarea id="content" name="content" style="min-height:400px;">${esc(content)}</textarea>
       <div class="actions">
         <button type="submit" class="btn btn-primary">Save</button>
+        ${toggleBtn}
         <a href="/ctx/${esc(context)}/${esc(name)}?ext=${esc(extension)}" class="btn">Cancel</a>
       </div>
-    </form>`
+    </form>${isMarkdown ? `\n    <script>${EDITOR_SCRIPT}</script>` : ""}`
   );
 }
 

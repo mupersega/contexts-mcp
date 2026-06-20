@@ -594,7 +594,41 @@ export const styles = `
     .link-row { display: grid; grid-template-columns: 1fr 2fr; gap: 0.5rem; margin-bottom: 0.4rem; }
     .link-row input { margin-bottom: 0; }
 
-    .actions { display: flex; gap: 0.5rem; align-items: center; }
+    .actions { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+
+    /* --- Rich text editor (lazy TipTap; the raw textarea is the fallback) --- */
+    .rt-toolbar { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 0.5rem; }
+    .rt-btn {
+      width: auto; margin: 0; padding: 0.25rem 0.55rem;
+      border: 1px solid var(--border-heavy); background: var(--surface); color: var(--text-muted);
+      font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; cursor: pointer;
+      box-shadow: 1px 1px 0 var(--btn-shadow); transition: all 0.08s;
+    }
+    .rt-btn:hover { background: var(--surface-raised); color: var(--text-bright); border-color: var(--text-muted); }
+    .rt-btn:active { box-shadow: 0 0 0 var(--btn-shadow); transform: translate(1px, 1px); }
+    .rt-btn.is-active { color: var(--accent); border-color: var(--accent); }
+    .rt-loader {
+      padding: 1rem 0.75rem; margin-bottom: 0.75rem; font-size: 0.8rem; font-style: italic;
+      color: var(--text-dim); border: 1px dashed var(--border);
+      animation: rt-pulse 1.1s ease-in-out infinite;
+    }
+    @keyframes rt-pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 0.9; } }
+    .rt-editor { margin-bottom: 0.75rem; }
+    /* Reuse the view-mode prose look (.doc-content via editorProps) for the
+       editable surface, but strip its document chrome and give it an input shell. */
+    .rt-editor .ProseMirror.doc-content {
+      min-height: 400px; margin: 0; padding: 0.9rem 1.1rem;
+      border: 1px solid var(--border); border-top: 1px solid var(--border);
+      border-bottom: 2px solid var(--border-heavy);
+      background: var(--input-bg); outline: none;
+    }
+    .rt-editor .ProseMirror.doc-content::before,
+    .rt-editor .ProseMirror.doc-content::after { content: none; }
+    .rt-editor .ProseMirror.doc-content > :first-child { margin-top: 0; }
+    .rt-editor .ProseMirror.doc-content:focus {
+      border-color: var(--text-muted); border-bottom-color: var(--text-bright); background: var(--input-bg-focus);
+    }
+    .rt-editor .ProseMirror { outline: none; }
 
     /* --- Empty --- */
     .empty {
