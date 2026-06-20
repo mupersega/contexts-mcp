@@ -129,6 +129,9 @@ export function layout(title: string, body: string): string {
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <!-- Warm the TLS connection to the editor CDN so the lazy first-edit module
+       fetch starts fast. A hint only — no editor code is downloaded until edit. -->
+  <link rel="preconnect" href="https://esm.sh" crossorigin>
   <style>
     .fonts-loading { opacity: 0; }
     .fonts-ready { opacity: 1; transition: opacity 0.15s ease-in; }
