@@ -638,6 +638,17 @@ export const styles = `
     .rt-editor ul[data-type="taskList"] li > label { flex: 0 0 auto; margin-top: 0.2rem; user-select: none; }
     .rt-editor ul[data-type="taskList"] li > div { flex: 1 1 auto; }
     .rt-editor ul[data-type="taskList"] li > div > p { margin: 0; }
+    /* [[wiki-links]] render as an atomic accent pill (chip) in the editor instead
+       of raw bracket text — selectable/deletable as one unit, can't be half-broken. */
+    .rt-editor .wikilink-chip {
+      background: var(--accent-line); color: var(--accent);
+      border: 1px solid var(--accent-line-hover); border-radius: 3px;
+      padding: 0.02em 0.35em; font-family: 'IBM Plex Mono', monospace; font-size: 0.88em;
+      white-space: nowrap; cursor: default;
+    }
+    .rt-editor .wikilink-chip.ProseMirror-selectednode {
+      background: var(--accent-line-hover); color: var(--text-bright); outline: 1px solid var(--accent);
+    }
 
     /* --- Empty --- */
     .empty {

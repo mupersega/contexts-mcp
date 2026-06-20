@@ -1273,6 +1273,59 @@ const EDITOR_SCRIPT = `
   }
   function serialize(){ return editor ? unesc(editor.storage.markdown.getMarkdown()) : ta.value; }
 
+  // [[wiki-links]] as a first-class atomic node (chip) rather than literal text:
+  // a markdown-it rule turns [[target|alias]] into a span on load, the node
+  // renders it as a styled pill (selectable/deletable as one unit), and serializes
+  // straight back to [[..]] with no escaping. markdown-it leaves a lone [bracket]
+  // alone, so only true wiki-links become chips.
+  function wikilinkPlugin(md){
+    md.inline.ruler.before('link', 'wikilink', function(state, silent){
+      var src = state.src, start = state.pos;
+      if (src.charCodeAt(start) !== 0x5B || src.charCodeAt(start + 1) !== 0x5B) return false;
+      var end = src.indexOf(']]', start + 2);
+      if (end < 0) return false;
+      var inner = src.slice(start + 2, end);
+      if (inner.length === 0 || inner.indexOf('[') >= 0 || inner.indexOf(']') >= 0) return false;
+      if (!silent){ var t = state.push('wikilink', '', 0); t.content = inner; }
+      state.pos = end + 2;
+      return true;
+    });
+    md.renderer.rules.wikilink = function(tokens, idx){
+      var inner = tokens[idx].content, pipe = inner.indexOf('|');
+      var target = pipe >= 0 ? inner.slice(0, pipe) : inner;
+      var alias = pipe >= 0 ? inner.slice(pipe + 1) : '';
+      var label = alias || target.split('/').pop();
+      var esc = md.utils.escapeHtml;
+      return '<span data-wikilink data-target="' + esc(target) + '" data-alias="' + esc(alias) + '">' + esc(label) + '</span>';
+    };
+  }
+  function makeWikiLink(Node){
+    return Node.create({
+      name: 'wikilink', inline: true, group: 'inline', atom: true, selectable: true,
+      addAttributes: function(){
+        return {
+          target: { default: '', parseHTML: function(el){ return el.getAttribute('data-target') || ''; } },
+          alias: { default: '', parseHTML: function(el){ return el.getAttribute('data-alias') || ''; } }
+        };
+      },
+      parseHTML: function(){ return [{ tag: 'span[data-wikilink]' }]; },
+      renderHTML: function(props){
+        var a = props.node.attrs;
+        var label = a.alias || String(a.target).split('/').pop();
+        return ['span', { 'data-wikilink': '', 'data-target': a.target, 'data-alias': a.alias, 'class': 'wikilink-chip' }, label];
+      },
+      addStorage: function(){
+        return { markdown: {
+          serialize: function(state, node){
+            var a = node.attrs, inner = a.alias ? (a.target + '|' + a.alias) : a.target;
+            state.write('[[' + inner + ']]');
+          },
+          parse: { setup: function(md){ md.use(wikilinkPlugin); } }
+        } };
+      }
+    });
+  }
+
   function loadMods(){
     if (M) return Promise.resolve(M);
     return Promise.all([
@@ -1291,6 +1344,7 @@ const EDITOR_SCRIPT = `
       M = { Editor:m[0].Editor, StarterKit:m[1].default, Link:m[2].default, Image:m[3].default,
         Table:m[4].default, TableRow:m[5].default, TableCell:m[6].default, TableHeader:m[7].default,
         TaskList:m[8].default, TaskItem:m[9].default, Markdown:m[10].Markdown };
+      M.WikiLink = makeWikiLink(m[0].Node);
       return M;
     });
   }
@@ -1300,7 +1354,7 @@ const EDITOR_SCRIPT = `
       element: mount,
       editorProps: { attributes: { class: 'doc-content' } },
       extensions: [
-        M.StarterKit, M.Link.configure({ openOnClick:false }), M.Image,
+        M.StarterKit, M.Link.configure({ openOnClick:false }), M.Image, M.WikiLink,
         M.Table.configure({ resizable:false }), M.TableRow, M.TableCell, M.TableHeader,
         M.TaskList, M.TaskItem.configure({ nested:true }),
         M.Markdown.configure({ html:false, transformPastedText:true, transformCopiedText:true })
