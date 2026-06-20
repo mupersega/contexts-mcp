@@ -423,6 +423,25 @@ export function layout(title: string, body: string): string {
       });
     });
   })();
+  (function() {
+    // "Reveal in folder" on embedded attachments — POSTs the loopback-only
+    // reveal endpoint, which opens the OS file manager with the file selected.
+    document.addEventListener('click', function(ev) {
+      var btn = ev.target.closest && ev.target.closest('[data-reveal]');
+      if (!btn) return;
+      ev.preventDefault();
+      var url = btn.getAttribute('data-reveal');
+      var orig = btn.textContent;
+      fetch(url, { method: 'POST' }).then(function(r){ return r.json(); }).then(function(j) {
+        if (!j || !j.ok) throw new Error((j && j.error) || 'reveal failed');
+        btn.textContent = 'opened';
+        setTimeout(function(){ btn.textContent = orig; }, 1200);
+      }).catch(function() {
+        btn.textContent = 'reveal failed';
+        setTimeout(function(){ btn.textContent = orig; }, 1600);
+      });
+    });
+  })();
   </script>
   <script>
   (function() {

@@ -3,6 +3,7 @@ import express from "express";
 import archiver from "archiver";
 import fs from "fs";
 import path from "path";
+import { spawn } from "child_process";
 import { marked } from "marked";
 import * as storage from "./storage.js";
 import { searchContexts } from "./search.js";
@@ -99,7 +100,34 @@ function parseTags(raw: unknown): string[] {
 // right element: video/audio get native players, PDFs a link. Image references
 // (png/jpg/...) are left as <img> and resolve to the assets route. src/alt come
 // from marked's already-escaped output, so re-emitting them is safe.
-function embedMediaTags(html: string): string {
+// A local asset src -> {context, file}; null for external/non-asset srcs. A
+// relative "assets/x" uses the current context; an absolute "/ctx/<c>/assets/x"
+// carries its own. Used to attach the download/reveal action bar only to files
+// we actually serve.
+function parseAssetSrc(src: string, ctx: string): { context: string; file: string } | null {
+  const clean = src.split(/[?#]/)[0];
+  let m = /^\/ctx\/([a-zA-Z0-9_-]+)\/assets\/(.+)$/.exec(clean);
+  if (m) return { context: m[1], file: m[2] };
+  m = /^assets\/(.+)$/.exec(clean);
+  if (m) return { context: ctx, file: m[1] };
+  return null;
+}
+
+// The action bar under an embedded local attachment: a forced download and a
+// "reveal in folder" that opens the OS file manager (handled by a loopback-only
+// endpoint). Filenames pass ATTACHMENT_NAME_REGEX at upload, so no escaping.
+function mediaActions(asset: { context: string; file: string }): string {
+  const base = `/ctx/${asset.context}/assets/${asset.file}`;
+  return (
+    `<figcaption class="doc-media-bar">` +
+    `<span class="doc-media-name">${asset.file}</span>` +
+    `<a class="doc-media-act" href="${base}?download=1" download>download</a>` +
+    `<button type="button" class="doc-media-act" data-reveal="${base}/reveal">reveal in folder</button>` +
+    `</figcaption>`
+  );
+}
+
+function embedMediaTags(html: string, context: string): string {
   const videoExt = /\.(mp4|webm|mov|ogg)(?:[?#].*)?$/i;
   const audioExt = /\.(mp3|wav)(?:[?#].*)?$/i;
   const pdfExt = /\.pdf(?:[?#].*)?$/i;
@@ -110,15 +138,17 @@ function embedMediaTags(html: string): string {
     const altM = /\balt="([^"]*)"/.exec(tag);
     const alt = altM ? altM[1] : "";
     const aria = alt ? ` aria-label="${alt}"` : "";
+    const asset = parseAssetSrc(src, context);
+    const bar = asset ? mediaActions(asset) : "";
     if (videoExt.test(src)) {
-      return `<video src="${src}" controls preload="metadata" class="doc-media"${aria}></video>`;
+      return `<figure class="doc-media-fig"><video src="${src}" controls preload="metadata" class="doc-media"${aria}></video>${bar}</figure>`;
     }
     if (audioExt.test(src)) {
-      return `<audio src="${src}" controls preload="metadata" class="doc-media"${aria}></audio>`;
+      return `<figure class="doc-media-fig"><audio src="${src}" controls preload="metadata" class="doc-media"${aria}></audio>${bar}</figure>`;
     }
     if (pdfExt.test(src)) {
-      const label = alt || src.split("/").pop() || "PDF";
-      return `<a class="doc-attachment" href="${src}" target="_blank" rel="noopener">${label}</a>`;
+      const label = alt || (asset ? asset.file : src.split("/").pop() || "PDF");
+      return `<figure class="doc-media-fig"><a class="doc-attachment" href="${src}" target="_blank" rel="noopener">${label}</a>${bar}</figure>`;
     }
     return tag;
   });
@@ -378,9 +408,64 @@ app.get("/ctx/:context/assets/:filename", (req, res) => {
     res.status(404).send(escHtml(err instanceof Error ? err.message : String(err)));
     return;
   }
+  // ?download=1 forces a save-as instead of inline playback (same convention as
+  // the item-raw route); default stays inline so embedded media still streams.
+  if (parseTruthy(req.query.download)) {
+    res.download(filePath, req.params.filename, (err) => {
+      if (err && !res.headersSent) res.status(404).send("Attachment not found");
+    });
+    return;
+  }
   res.sendFile(filePath, (err) => {
     if (err && !res.headersSent) res.status(404).send("Attachment not found");
   });
+});
+
+// Reveal an attachment in the OS file manager (Explorer/Finder). This runs a
+// local command, so it is loopback-only and the path is validated through the
+// same attachment guard as serving. Sensible only because this is a personal
+// localhost tool that already reads/writes these exact files.
+function isLoopback(req: express.Request): boolean {
+  const ip = req.ip || req.socket.remoteAddress || "";
+  return (
+    ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1" || ip.endsWith("127.0.0.1")
+  );
+}
+
+function revealInFileManager(filePath: string): void {
+  if (process.platform === "win32") {
+    // explorer returns exit code 1 even on success; fire-and-forget, no shell.
+    spawn("explorer.exe", [`/select,${filePath}`], { detached: true, stdio: "ignore" }).unref();
+  } else if (process.platform === "darwin") {
+    spawn("open", ["-R", filePath], { detached: true, stdio: "ignore" }).unref();
+  } else {
+    // No portable "select" on Linux — open the containing folder.
+    spawn("xdg-open", [path.dirname(filePath)], { detached: true, stdio: "ignore" }).unref();
+  }
+}
+
+app.post("/ctx/:context/assets/:filename/reveal", (req, res) => {
+  if (!isLoopback(req)) {
+    res.status(403).json({ ok: false, error: "reveal is available on localhost only" });
+    return;
+  }
+  let filePath: string;
+  try {
+    filePath = storage.attachmentFilePath(req.params.context, req.params.filename);
+  } catch (err: unknown) {
+    res.status(404).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+  if (!fs.existsSync(filePath)) {
+    res.status(404).json({ ok: false, error: "Attachment not found" });
+    return;
+  }
+  try {
+    revealInFileManager(filePath);
+    res.json({ ok: true });
+  } catch (err: unknown) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 app.get("/ctx/:context/:item", async (req, res) => {
@@ -399,7 +484,7 @@ app.get("/ctx/:context/:item", async (req, res) => {
     } else if (isMarkdown) {
       const anchored = anchorHeadings(await marked.parse(item.content));
       const nodeIds = await graph.getNodeIds();
-      contentHtml = renderWikiLinks(embedMediaTags(anchored.html), context, nodeIds);
+      contentHtml = renderWikiLinks(embedMediaTags(anchored.html, context), context, nodeIds);
       toc = anchored.toc;
     } else {
       contentHtml = escHtml(item.content);

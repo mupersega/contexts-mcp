@@ -1012,6 +1012,24 @@ export const styles = `
     .doc-content audio.doc-media { display: block; width: 100%; margin: 1rem 0; }
     .doc-content a.doc-attachment { display: inline-block; padding: 0.3rem 0.7rem; margin: 0.25rem 0; border: 1px solid var(--border); border-radius: 4px; color: var(--accent); text-decoration: none; }
     .doc-content a.doc-attachment:hover { border-color: var(--accent-line-hover); }
+    /* Embedded attachments are wrapped in a <figure> with a download / reveal bar.
+       The figure owns the vertical margin; the media itself sits flush above the bar. */
+    .doc-content .doc-media-fig { margin: 1rem 0; }
+    .doc-content .doc-media-fig video.doc-media,
+    .doc-content .doc-media-fig audio.doc-media,
+    .doc-content .doc-media-fig a.doc-attachment { margin: 0; }
+    .doc-content .doc-media-bar {
+      display: flex; align-items: center; gap: 0.85rem; flex-wrap: wrap; margin-top: 0.35rem;
+      font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; color: var(--text-dim);
+    }
+    .doc-content .doc-media-name { color: var(--text-muted); }
+    .doc-content .doc-media-act {
+      width: auto; margin: 0; padding: 0; background: none; border: none;
+      border-bottom: 1px dotted var(--text-dim); border-radius: 0; box-shadow: none;
+      font: inherit; text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--text-muted); cursor: pointer;
+    }
+    .doc-content .doc-media-act:hover { color: var(--accent); border-bottom-color: var(--accent); }
     /* Inter-context wiki-links ([[item]]) resolved in rendered markdown. */
     .doc-content a.wikilink { color: var(--accent); text-decoration: none; border-bottom: 1px dotted var(--accent-line-hover); }
     .doc-content a.wikilink:hover { border-bottom-style: solid; color: var(--text-bright); }
