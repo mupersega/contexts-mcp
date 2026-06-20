@@ -328,21 +328,35 @@ function undirectedKey(a: string, b: string): string {
 
 // --- Cached accessors ---
 
-const _cache = new Map<string, { graph: Graph; at: number }>();
-const CACHE_TTL_MS = 5000;
+// Event-driven, not time-driven: the built graph is held until the corpus
+// actually changes. storage.corpusSignature() is a cheap filesystem fingerprint
+// that advances on every write; a read rebuilds only when it no longer matches
+// the signature the cache was built against. So an idle graph is served from
+// memory indefinitely (no rebuild-on-a-timer), and any mutation — in this
+// process or the other one sharing the data dir — is reflected on the next read.
+const _cache = new Map<string, Graph>();
+let _cacheSig: string | null = null;
 
 export async function getGraph(includeArchived = false): Promise<Graph> {
   const key = includeArchived ? "all" : "active";
-  const now = Date.now();
+  const sig = await storage.corpusSignature();
+  if (sig !== _cacheSig) {
+    _cache.clear();
+    _cacheSig = sig;
+  }
   const hit = _cache.get(key);
-  if (hit && now - hit.at < CACHE_TTL_MS) return hit.graph;
+  if (hit) return hit;
   const graph = await buildGraph(includeArchived);
-  _cache.set(key, { graph, at: now });
+  _cache.set(key, graph);
   return graph;
 }
 
+// Force a rebuild on the next read regardless of corpus state. Normal operation
+// doesn't need this (the signature handles freshness); the tests use it to drop
+// cross-test state, and it's a safe manual reset.
 export function invalidateGraphCache(): void {
   _cache.clear();
+  _cacheSig = null;
 }
 
 // Set of all existing node ids ("context/item") — used to flag unresolved

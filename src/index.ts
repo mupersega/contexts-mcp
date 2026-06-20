@@ -34,12 +34,43 @@ const server = new McpServer(
   {
     capabilities: { tools: {} },
     instructions:
-      "Persistent context folders for Claude Code sessions. A context is a folder holding items in md (default), txt, json, yaml, yml, csv, or sql. Markdown items carry frontmatter (title, tags, timestamps); other kinds carry only filesystem metadata. Contexts themselves can carry optional metadata (title, description, free-form status, tags, links). Prefer search_contexts before answering topics that may already be logged, and prefer append_to_item on an existing item over creating parallel items. Markdown supports mermaid fences (```mermaid) that render as SVG diagrams in the optional web UI — prefer them over hand-drawn ASCII art; call get_guide({ name: 'mermaid' }) for syntax.",
+      "Persistent context folders for Claude Code sessions. A context is a folder holding items in md (default), txt, json, yaml, yml, csv, or sql. Markdown items carry frontmatter (title, tags, timestamps); other kinds carry only filesystem metadata. Contexts themselves can carry optional metadata (title, description, free-form status, tags, links). Prefer search_contexts before answering topics that may already be logged, and prefer append_to_item on an existing item over creating parallel items. Items also form a graph: use search_contexts to find an entry point, then expand from it — get_item already appends a Connections footer, and get_item_links gives the full set of linked, back-linked, and related items. Backlinks in particular surface references that keyword search misses. Markdown supports mermaid fences (```mermaid) that render as SVG diagrams in the optional web UI — prefer them over hand-drawn ASCII art; call get_guide({ name: 'mermaid' }) for syntax.",
   }
 );
 
 const text = (value: string) => ({ content: [{ type: "text" as const, text: value }] });
 const json = (value: unknown) => text(JSON.stringify(value, null, 2));
+
+// A compact, token-light connections block appended to get_item reads so an
+// agent discovers the graph in its normal search -> read loop instead of having
+// to know to call get_item_links. Backlinks especially surface references that
+// keyword search won't. Omitted entirely when an item has no connections, and a
+// graph hiccup never breaks a plain read. Cheap now that getGraph is cached.
+async function connectionsFooter(context: string, item: string): Promise<string> {
+  let c: Awaited<ReturnType<typeof graph.getItemConnections>>;
+  try {
+    c = await graph.getItemConnections(context, item);
+  } catch {
+    return "";
+  }
+  if (!c.outbound.length && !c.backlinks.length && !c.related.length) return "";
+  const cap = (refs: { context: string; item: string }[], n: number): string => {
+    const shown = refs.slice(0, n).map((r) => `${r.context}/${r.item}`);
+    const extra = refs.length - shown.length;
+    return shown.join(", ") + (extra > 0 ? `, +${extra} more` : "");
+  };
+  const out: string[] = [];
+  if (c.outbound.length) out.push(`Links to:    ${cap(c.outbound, 8)}`);
+  if (c.backlinks.length) out.push(`Linked from: ${cap(c.backlinks, 8)}`);
+  if (c.related.length) {
+    const rel = c.related
+      .slice(0, 5)
+      .map((r) => `${r.context}/${r.item} (${Math.round(r.score * 100) / 100})`);
+    const extra = c.related.length - rel.length;
+    out.push(`Related:     ${rel.join(", ")}${extra > 0 ? `, +${extra} more` : ""}`);
+  }
+  return `\n\n--- Connections ---\n${out.join("\n")}\n(get_item_links for the full set)`;
+}
 
 const MIGRATION_GUIDE = `# Migrating existing markdown into contexts-mcp
 
@@ -282,7 +313,7 @@ server.registerTool(
 server.registerTool(
   "get_item",
   {
-    description: "Read an item. Default: parsed frontmatter + body for md, raw text otherwise. Pass raw=true for byte-for-byte contents as JSON.",
+    description: "Read an item. Default: parsed frontmatter + body for md, raw text otherwise, followed by a compact Connections footer (links/backlinks/related) when the item has any — pull those in for fuller context. Pass raw=true for byte-for-byte contents as JSON (no footer).",
     inputSchema: GetItemArgsSchema.shape,
   },
   async (args) => {
@@ -292,6 +323,7 @@ server.registerTool(
     }
 
     const item = await storage.getItem(args.context, args.item, args.extension);
+    const footer = await connectionsFooter(args.context, item.name);
 
     if (item.extension === "md" && item.frontmatter) {
       const fm = item.frontmatter;
@@ -305,11 +337,11 @@ server.registerTool(
         "",
         item.content,
       ].join("\n");
-      return text(output);
+      return text(output + footer);
     }
 
     const header = `[${item.extension.toUpperCase()}] ${item.name}.${item.extension} (${item.size} bytes, updated ${item.updated})`;
-    return text(`${header}\n\n${item.content}`);
+    return text(`${header}\n\n${item.content}${footer}`);
   }
 );
 
@@ -405,7 +437,7 @@ server.registerTool(
   "get_item_links",
   {
     description:
-      "Show an item's connections in the context graph: outbound links it makes, backlinks (items that link to it), and semantically-related items.",
+      "Expand context around an item via the graph: its outbound links, backlinks (what references it — keyword search won't surface these), and semantically-related items. Reach for this after search_contexts lands you on a relevant item, to pull in the directly-connected context a keyword match alone would miss.",
     inputSchema: GetItemLinksArgsSchema.shape,
   },
   async (args) => {

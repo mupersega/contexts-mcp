@@ -256,6 +256,23 @@ async function run() {
     graph.invalidateGraphCache();
   });
 
+  await check("graph: corpus signature is stable across reads, moves on mutation", async () => {
+    await storage.createContext("gsig");
+    await storage.createItem("gsig", "one", "md", { content: "first item" });
+    const sigA = await storage.corpusSignature();
+    const sigA2 = await storage.corpusSignature(); // no mutation between reads
+    assertEq(sigA, sigA2, "signature is stable when nothing changed (no rebuild trigger)");
+    await storage.updateItem("gsig", "one", { content: "first item, edited" });
+    const sigB = await storage.corpusSignature();
+    if (sigB === sigA) throw new Error("signature must change after an in-context edit");
+    await storage.createItem("gsig", "two", "md", { content: "second item" });
+    const sigC = await storage.corpusSignature();
+    if (sigC === sigB) throw new Error("signature must change after adding an item");
+    await storage.deleteContext("gsig");
+    const sigD = await storage.corpusSignature();
+    if (sigD === sigC) throw new Error("signature must change after deleting a context");
+  });
+
   console.log("");
   if (failed > 0) {
     console.error(`${failed} check(s) failed`);

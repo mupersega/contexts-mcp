@@ -555,6 +555,34 @@ export async function deleteAttachment(context: string, filename: string): Promi
   await touchContext(context);
 }
 
+// A cheap fingerprint of the whole corpus, used to decide whether the graph
+// needs rebuilding. Every mutation rewrites a file via tmp+rename (items, and
+// _context.yaml through touchContext), which advances the containing context
+// dir's mtime; create/delete-context changes the set of dir names. So this
+// signature changes on every write and on nothing else — and because it reads
+// the filesystem directly, it is coherent across the MCP and web-UI processes.
+// Cost is one readdir + a stat per context dir (scales with contexts, not
+// items), versus reading + tokenizing every item that a full rebuild does.
+export async function corpusSignature(): Promise<string> {
+  const dd = dataDir();
+  let entries: import("fs").Dirent[];
+  try {
+    entries = await fs.readdir(dd, { withFileTypes: true });
+  } catch {
+    return ""; // no data dir yet → empty corpus
+  }
+  const dirs = entries
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name)
+    .sort();
+  const parts: string[] = [];
+  for (const name of dirs) {
+    const st = await fs.stat(path.join(dd, name)).catch(() => null);
+    parts.push(`${name}:${st ? Math.floor(st.mtimeMs) : 0}`);
+  }
+  return parts.join("|");
+}
+
 // Read every item's content across all contexts — the corpus the link/similarity
 // graph is built from. Spans everything (including archived). Skips unreadable
 // entries rather than failing the whole build.
