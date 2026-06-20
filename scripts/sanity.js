@@ -51,6 +51,26 @@ async function run() {
     assertEq(items[0].title, "second", "title after recreate");
   });
 
+  await check("no-op update preserves the revert backup (md + non-md)", async () => {
+    await storage.createContext("noop");
+    await storage.createItem("noop", "doc", "md", { title: "t", content: "AAA" });
+    await storage.updateItem("noop", "doc", { content: "BBB" }); // real change -> .bak = AAA
+    if (!(await storage.hasBackup("noop", "doc"))) throw new Error("expected a backup after a real edit");
+    await storage.updateItem("noop", "doc", { title: "t", content: "BBB" }); // identical -> must NOT rotate .bak
+    await storage.updateItem("noop", "doc", { title: "t", content: "BBB\n" }); // trailing-newline-only -> still no-op
+    await storage.revertItem("noop", "doc");
+    const r = await storage.getItem("noop", "doc");
+    if (!r.content.includes("AAA")) throw new Error(`md revert lost after no-op saves: ${JSON.stringify(r.content)}`);
+
+    // Non-md path uses an exact compare; an identical write must not rotate .bak.
+    await storage.createItem("noop", "data", "csv", { content: "a,b\n1,2\n" });
+    await storage.updateItem("noop", "data", { content: "a,b\n9,9\n" }); // real change -> .bak = 1,2
+    await storage.updateItem("noop", "data", { content: "a,b\n9,9\n" }); // identical -> no-op
+    await storage.revertItem("noop", "data");
+    const d = await storage.getItem("noop", "data");
+    if (!d.content.includes("1,2")) throw new Error(`csv revert lost after no-op save: ${JSON.stringify(d.content)}`);
+  });
+
   await check("tag update replaces, not unions", async () => {
     await storage.createContext("tags");
     await storage.updateContextMetadata("tags", { tags: ["a", "b"] });

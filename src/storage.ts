@@ -129,6 +129,12 @@ function isSupportedExtension(ext: string): ext is ItemExtension {
   return (ITEM_EXTENSIONS as readonly string[]).includes(ext);
 }
 
+function sameStringArray(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
 interface ParsedItemFilename {
   base: string;
   ext: ItemExtension;
@@ -872,13 +878,32 @@ export async function updateItem(
     const parsed = matter(raw);
     const meta = parsed.data as Record<string, unknown>;
 
+    // No-op guard: if title, tags, and body are all unchanged, skip the write.
+    // A redundant save (e.g. opening the editor and hitting Save without
+    // touching anything) would otherwise rotate the one-shot .bak snapshot —
+    // destroying the revert target — and bump timestamps for nothing. Body is
+    // compared trimmed so a trailing-newline difference alone is not a "change".
+    const curTitle = typeof meta.title === "string" ? meta.title : undefined;
+    const curTags = Array.isArray(meta.tags)
+      ? (meta.tags as unknown[]).filter((t): t is string => typeof t === "string")
+      : [];
+    const newTitle = updates.title !== undefined ? updates.title : curTitle;
+    const newTags = updates.tags !== undefined ? updates.tags : curTags;
+    const newBody = updates.content !== undefined ? updates.content : parsed.content;
+    if (
+      newBody.trim() === parsed.content.trim() &&
+      newTitle === curTitle &&
+      sameStringArray(newTags, curTags)
+    ) {
+      return;
+    }
+
     if (updates.title !== undefined) meta.title = updates.title;
     if (updates.tags !== undefined) meta.tags = updates.tags;
     meta.updated = new Date().toISOString();
     if (!meta.created) meta.created = meta.updated;
 
-    const body = updates.content !== undefined ? updates.content : parsed.content;
-    const output = matter.stringify(body, meta);
+    const output = matter.stringify(newBody, meta);
     await snapshotItem(filePath);
     await writeFileAtomic(filePath, output);
     await touchContext(context);
@@ -893,6 +918,10 @@ export async function updateItem(
   if (updates.content === undefined) {
     throw new Error(`No content provided to update '${base}.${ext}'`);
   }
+  // Same no-op guard for non-md: an identical write would needlessly rotate the
+  // backup. Exact compare (no trimming) — whitespace can be significant here.
+  const current = await fs.readFile(filePath, "utf-8").catch(() => null);
+  if (current === updates.content) return;
   await snapshotItem(filePath);
   await writeFileAtomic(filePath, updates.content);
   await touchContext(context);
