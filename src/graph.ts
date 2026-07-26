@@ -334,8 +334,44 @@ function undirectedKey(a: string, b: string): string {
 // the signature the cache was built against. So an idle graph is served from
 // memory indefinitely (no rebuild-on-a-timer), and any mutation — in this
 // process or the other one sharing the data dir — is reflected on the next read.
+//
+// Two layers: process memory (fastest, per-process) and a persisted file in the
+// data dir (survives restarts, shared between the MCP and web-UI processes).
+// A cold process whose corpus hasn't changed pays one small JSON read instead
+// of re-reading every item and re-running the similarity pass.
 const _cache = new Map<string, Graph>();
 let _cacheSig: string | null = null;
+let _ignoreDisk = false;
+
+const DISK_CACHE_VERSION = 1;
+
+interface DiskGraphCache {
+  version: number;
+  signature: string;
+  similarity: string;
+  graphs: Partial<Record<"active" | "all", Graph>>;
+}
+
+// The similarity backend is part of the cache identity: a graph built with
+// TF-IDF must not be served after the operator switches to Ollama (or swaps
+// embedding models), and vice versa.
+function similarityMode(): string {
+  return process.env.CONTEXTS_SIMILARITY === "ollama"
+    ? `ollama:${process.env.CONTEXTS_OLLAMA_MODEL || "nomic-embed-text"}`
+    : "tfidf";
+}
+
+function isDiskCache(x: unknown): x is DiskGraphCache {
+  if (!x || typeof x !== "object") return false;
+  const c = x as DiskGraphCache;
+  return (
+    c.version === DISK_CACHE_VERSION &&
+    typeof c.signature === "string" &&
+    typeof c.similarity === "string" &&
+    !!c.graphs &&
+    typeof c.graphs === "object"
+  );
+}
 
 export async function getGraph(includeArchived = false): Promise<Graph> {
   const key = includeArchived ? "all" : "active";
@@ -346,17 +382,54 @@ export async function getGraph(includeArchived = false): Promise<Graph> {
   }
   const hit = _cache.get(key);
   if (hit) return hit;
+
+  if (!_ignoreDisk) {
+    const disk = await storage.readGraphCacheFile();
+    if (isDiskCache(disk) && disk.signature === sig && disk.similarity === similarityMode()) {
+      const g = disk.graphs[key];
+      if (g) {
+        _cache.set(key, g);
+        return g;
+      }
+    }
+  }
+
   const graph = await buildGraph(includeArchived);
   _cache.set(key, graph);
+  await persistGraphCache(sig);
   return graph;
+}
+
+// Write-behind after a build. Both variants ("active"/"all") share the one
+// file; whatever the other process already persisted for this same signature
+// is carried over so building one variant never evicts the other.
+async function persistGraphCache(sig: string): Promise<void> {
+  const graphs: DiskGraphCache["graphs"] = {};
+  const disk = await storage.readGraphCacheFile();
+  if (isDiskCache(disk) && disk.signature === sig && disk.similarity === similarityMode()) {
+    Object.assign(graphs, disk.graphs);
+  }
+  for (const k of ["active", "all"] as const) {
+    const g = _cache.get(k);
+    if (g) graphs[k] = g;
+  }
+  await storage.writeGraphCacheFile({
+    version: DISK_CACHE_VERSION,
+    signature: sig,
+    similarity: similarityMode(),
+    graphs,
+  });
 }
 
 // Force a rebuild on the next read regardless of corpus state. Normal operation
 // doesn't need this (the signature handles freshness); the tests use it to drop
-// cross-test state, and it's a safe manual reset.
+// cross-test state, and it's a safe manual reset. Also stops trusting the disk
+// cache for the rest of this process — "force a rebuild" must mean an actual
+// rebuild, not a reload of what was just invalidated.
 export function invalidateGraphCache(): void {
   _cache.clear();
   _cacheSig = null;
+  _ignoreDisk = true;
 }
 
 // Set of all existing node ids ("context/item") — used to flag unresolved

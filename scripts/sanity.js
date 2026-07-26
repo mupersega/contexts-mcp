@@ -276,6 +276,25 @@ async function run() {
     graph.invalidateGraphCache();
   });
 
+  await check("graph: build persists a disk cache keyed to the corpus signature", async () => {
+    await storage.createContext("gdisk");
+    await storage.createItem("gdisk", "one", "md", { content: "cached graph item" });
+    graph.invalidateGraphCache();
+    await graph.getGraph();
+    const disk = await storage.readGraphCacheFile();
+    if (!disk || typeof disk !== "object") throw new Error("no cache file written after build");
+    const sig = await storage.corpusSignature();
+    assertEq(disk.signature, sig, "cache carries the signature it was built against");
+    if (!disk.graphs?.active?.nodes?.some((n) => n.id === "gdisk/one")) {
+      throw new Error("persisted graph missing the just-built nodes");
+    }
+    await storage.updateItem("gdisk", "one", { content: "cached graph item, edited" });
+    const sigAfter = await storage.corpusSignature();
+    if (disk.signature === sigAfter) throw new Error("stale cache would be indistinguishable after mutation");
+    await storage.deleteContext("gdisk");
+    graph.invalidateGraphCache();
+  });
+
   await check("graph: corpus signature is stable across reads, moves on mutation", async () => {
     await storage.createContext("gsig");
     await storage.createItem("gsig", "one", "md", { content: "first item" });

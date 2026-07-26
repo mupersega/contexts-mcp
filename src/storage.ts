@@ -589,6 +589,30 @@ export async function corpusSignature(): Promise<string> {
   return parts.join("|");
 }
 
+// The persisted graph cache — a single dot-prefixed file at the data-dir root.
+// The dot prefix can never collide with a context (names are [a-zA-Z0-9_-]+) and
+// corpusSignature/listContexts only look at directories, so writing it neither
+// invalidates the signature nor shows up anywhere. Both helpers are best-effort:
+// a missing/corrupt cache file just means a rebuild, never an error.
+const GRAPH_CACHE_FILENAME = ".graph-cache.json";
+
+export async function readGraphCacheFile(): Promise<unknown> {
+  try {
+    const raw = await fs.readFile(path.join(dataDir(), GRAPH_CACHE_FILENAME), "utf-8");
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+export async function writeGraphCacheFile(data: unknown): Promise<void> {
+  try {
+    await writeFileAtomic(path.join(dataDir(), GRAPH_CACHE_FILENAME), JSON.stringify(data));
+  } catch {
+    // a failed cache write must never break the read path that triggered it
+  }
+}
+
 // Read every item's content across all contexts — the corpus the link/similarity
 // graph is built from. Spans everything (including archived). Skips unreadable
 // entries rather than failing the whole build.
