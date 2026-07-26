@@ -67,12 +67,14 @@ function parseExtQuery(raw: unknown): ItemExtension | undefined {
   return undefined;
 }
 
+// Default is recent activity — the landing page should lead with what you were
+// just working on, not the alphabet.
 function parseSort(raw: unknown): ListContextsSort {
   if (typeof raw === "string") {
     const parsed = ListContextsSortSchema.safeParse(raw);
     if (parsed.success) return parsed.data;
   }
-  return "name";
+  return "recent_activity";
 }
 
 function parseTruthy(raw: unknown): boolean {
@@ -743,6 +745,12 @@ async function main() {
   app.listen(PORT, () => {
     console.log(`Contexts UI running at http://localhost:${PORT}`);
   });
+
+  // Warm the graph cache in the background so the first /graph or item view
+  // doesn't pay the build. With the persisted cache this is usually just a
+  // file read; when the corpus changed since last run it absorbs the rebuild
+  // before anyone clicks. Failure is fine — routes build on demand anyway.
+  graph.getGraph().catch(() => {});
 }
 
 main().catch((err) => {

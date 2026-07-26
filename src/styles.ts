@@ -456,6 +456,15 @@ export const styles = `
     .tag::before { content: '#'; opacity: 0.5; margin-right: 0.1rem; }
     .tag-ctx { border-style: dotted; color: var(--text); }
     .tag-ctx::before { content: '»'; opacity: 0.5; margin-right: 0.2rem; }
+    /* Collapsed remainder of a long tag row: the hidden chips flow inline once
+       revealed; the "+N" chip itself is a button dressed as a tag. */
+    /* display:contents would override the UA's [hidden]{display:none}, so the
+       collapsed state needs its own explicit rule. */
+    .tag-overflow { display: contents; }
+    .tag-overflow[hidden] { display: none; }
+    .tag-more { cursor: pointer; width: auto; margin-bottom: 0; color: var(--text-muted); }
+    .tag-more::before { content: none; }
+    .tag-more:hover { color: var(--text-bright); border-color: var(--text-muted); }
 
     /* --- Status badge --- */
     .status-badge {
@@ -597,7 +606,16 @@ export const styles = `
     .actions { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
 
     /* --- Rich text editor (lazy TipTap; the raw textarea is the fallback) --- */
-    .rt-toolbar { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 0.5rem; }
+    /* The toolbar stays pinned while the (often long) document scrolls. It sits
+       below the page header + the edit page's sticky breadcrumb; the opaque
+       background and top padding cover the seam so content never peeks through. */
+    .rt-toolbar {
+      display: flex; flex-wrap: wrap; gap: 0.3rem;
+      position: sticky; top: calc(var(--sticky-header-h) + var(--sticky-crumb-h));
+      z-index: 15; background: var(--bg);
+      padding: 0.45rem 0 0.5rem; margin-bottom: 0.5rem;
+      border-bottom: 1px dotted var(--border);
+    }
     .rt-btn {
       width: auto; margin: 0; padding: 0.25rem 0.55rem;
       border: 1px solid var(--border-heavy); background: var(--surface); color: var(--text-muted);

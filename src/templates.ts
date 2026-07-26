@@ -15,10 +15,16 @@ function tags(t: string[]): string {
   return t.map((tag) => `<span class="tag">${esc(tag)}</span>`).join(" ");
 }
 
+// Agents tag contexts liberally, so an uncapped chip row can swallow a card.
+// Show the first few; the rest collapse behind a "+N" toggle chip.
+const CTX_TAG_CAP = 5;
+
 function contextTagChips(t: string[]): string {
-  return t
-    .map((tag) => `<span class="tag tag-ctx">${esc(tag)}</span>`)
-    .join(" ");
+  const chip = (tag: string) => `<span class="tag tag-ctx">${esc(tag)}</span>`;
+  if (t.length <= CTX_TAG_CAP) return t.map(chip).join(" ");
+  const shown = t.slice(0, CTX_TAG_CAP).map(chip).join(" ");
+  const hidden = t.slice(CTX_TAG_CAP);
+  return `${shown} <span class="tag-overflow" hidden>${hidden.map(chip).join(" ")}</span><button type="button" class="tag tag-ctx tag-more" onclick="var s=this.previousElementSibling;s.hidden=!s.hidden;this.textContent=s.hidden?'+${hidden.length}':'less'">+${hidden.length}</button>`;
 }
 
 function statusBadge(status?: string): string {
@@ -561,9 +567,10 @@ export function contextListRegionFragment(
         .join("")
     : `<div class="empty">${emptyMessage}</div>`;
 
+  // "recent" leads because it is the default sort (see parseSort in web.ts).
   const sortOptions: Array<{ v: ContextListControls["sort"]; label: string }> = [
-    { v: "name", label: "name" },
     { v: "recent_activity", label: "recent" },
+    { v: "name", label: "name" },
     { v: "updated", label: "updated" },
     { v: "created", label: "created" },
   ];
