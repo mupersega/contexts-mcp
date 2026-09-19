@@ -18,7 +18,7 @@
     "ui": "node dist/web.js",
     "setup": "tsc && node dist/setup.js",
     "bench": "node scripts/bench.js",
-    "board-check": "node scripts/board-check.js",
+    "exhibit-check": "node scripts/exhibit-check.js",
     "install:shortcut": "powershell -ExecutionPolicy Bypass -File scripts/install.ps1"
   },
   "dependencies": {

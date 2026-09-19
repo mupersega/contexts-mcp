@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// scripts/board-check.js — geometry checks for the board view (view: board).
+// scripts/exhibit-check.js — geometry checks for the exhibit view (view: exhibit).
 //
-// The board's layout claims (clusters don't overlap, callout labels stack
+// The exhibit's layout claims (clusters don't overlap, callout labels stack
 // without collision, images keep their aspect ratio, pins land inside their
 // figure, the settle is deterministic) are asserted here as numbers, against
 // the REAL client code running in a real headless Chrome — not a parallel
-// reimplementation of the layout. BOARD_SCRIPT exposes its settled geometry on
-// window.__boardDebug for exactly this harness.
+// reimplementation of the layout. EXHIBIT_SCRIPT exposes its settled geometry on
+// window.__exhibitDebug for exactly this harness.
 //
 // No framework, no new dependencies: PNG fixtures are generated with zlib,
 // Chrome is driven over raw CDP using Node's built-in WebSocket (Node >= 22).
@@ -21,7 +21,7 @@ import { fileURLToPath } from "url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "..");
-const tmpRoot = path.join(os.tmpdir(), `contexts-mcp-board-${process.pid}-${Date.now()}`);
+const tmpRoot = path.join(os.tmpdir(), `contexts-mcp-exhibit-${process.pid}-${Date.now()}`);
 const dataDir = path.join(tmpRoot, "data");
 const profileDir = path.join(tmpRoot, "chrome-profile");
 const uiPort = 3900 + (process.pid % 90);
@@ -131,7 +131,7 @@ const STRESS = {
     ]),
     ...[1, 2, 3, 4].map((n) => ({ id: `note-${n}`, type: "note",
       text: `overview note ${n}: a long paragraph of critique text that wraps onto many lines and makes a tall card, the way a wild agent actually writes notes when summarizing a whole study` })),
-    // FOUR hub notes wired into all three copies — the wild board's exact
+    // FOUR hub notes wired into all three copies — the wild exhibit's exact
     // lesson-note shape. Under this load the copies get dragged toward one
     // over-subscribed middle, and a pair loses the geometry lottery unless
     // annotative springs are weaker than structural ones.
@@ -139,8 +139,8 @@ const STRESS = {
       text: `lesson ${k}: a cross-study observation that applies to all three copies and drags them toward a common centre if its springs are as strong as the pair bonds` })),
     { id: "chip-a", type: "item", link: "notes", label: "critique round one" },
     { id: "chip-b", type: "item", link: "notes", label: "values" },
-    // late-declared multi-link chips: the wild board's "values"/"temperature"
-    // chips — last in the file, linked to early figures across the board
+    // late-declared multi-link chips: the wild exhibit's "values"/"temperature"
+    // chips — last in the file, linked to early figures across the exhibit
     { id: "chip-late-1", type: "item", link: "notes", label: "temperature" },
     { id: "chip-late-2", type: "item", link: "notes", label: "edges" },
   ],
@@ -159,20 +159,20 @@ const STRESS = {
 };
 
 function writeFixture() {
-  const ctxDir = path.join(dataDir, "board-test");
+  const ctxDir = path.join(dataDir, "exhibit-test");
   fs.mkdirSync(path.join(ctxDir, "assets"), { recursive: true });
   fs.writeFileSync(path.join(ctxDir, "assets", "wide.png"), makePng(160, 100, [180, 60, 60]));
   fs.writeFileSync(path.join(ctxDir, "assets", "tall.png"), makePng(100, 160, [60, 60, 180]));
   fs.writeFileSync(path.join(ctxDir, "notes.md"), "---\ntitle: notes\ntags: []\n---\nlinked item\n");
   const fence = JSON.stringify(FENCE, null, 2);
   fs.writeFileSync(
-    path.join(ctxDir, "board-test.md"),
-    `---\ntitle: board fixture\ntags: []\nview: board\n---\n\n\`\`\`board\n${fence}\n\`\`\`\n`
+    path.join(ctxDir, "exhibit-test.md"),
+    `---\ntitle: exhibit fixture\ntags: []\nview: exhibit\n---\n\n\`\`\`exhibit\n${fence}\n\`\`\`\n`
   );
   const stress = JSON.stringify(STRESS, null, 2);
   fs.writeFileSync(
-    path.join(ctxDir, "board-stress.md"),
-    `---\ntitle: board stress fixture\ntags: []\nview: board\n---\n\n\`\`\`board\n${stress}\n\`\`\`\n`
+    path.join(ctxDir, "exhibit-stress.md"),
+    `---\ntitle: exhibit stress fixture\ntags: []\nview: exhibit\n---\n\n\`\`\`exhibit\n${stress}\n\`\`\`\n`
   );
 }
 
@@ -245,20 +245,20 @@ async function probeKiosk(browser, debugPort, url) {
     const r = await tab.send("Runtime.evaluate", { expression: expr, returnByValue: true });
     return !!(r.result && r.result.value);
   };
-  await waitFor(() => evalBool("!!window.__boardDebug"), 15000, "kiosk board settle");
+  await waitFor(() => evalBool("!!window.__exhibitDebug"), 15000, "kiosk exhibit settle");
   const headerHidden = await evalBool(
     "(function(){ var h = document.querySelector('.container > header'); return h && getComputedStyle(h).display === 'none'; })()"
   );
   const introGone = await evalBool("!document.querySelector('.graph-intro')");
-  const playDone = await waitFor(() => evalBool("window.__boardPlayDone === true"), 25000, "play completion signal")
+  const playDone = await waitFor(() => evalBool("window.__exhibitPlayDone === true"), 25000, "play completion signal")
     .then(() => true)
     .catch(() => false);
   tab.close();
   return { headerHidden, introGone, playDone };
 }
 
-// Open the board page in a fresh tab and return its settled __boardDebug.
-async function loadBoard(browser, debugPort, url) {
+// Open the exhibit page in a fresh tab and return its settled __exhibitDebug.
+async function loadExhibit(browser, debugPort, url) {
   const { targetId } = await browser.send("Target.createTarget", { url });
   const page = await waitFor(async () => {
     const list = await (await fetch(`http://127.0.0.1:${debugPort}/json/list`)).json();
@@ -268,11 +268,11 @@ async function loadBoard(browser, debugPort, url) {
   const tab = await cdp(page.webSocketDebuggerUrl);
   const debug = await waitFor(async () => {
     const r = await tab.send("Runtime.evaluate", {
-      expression: "window.__boardDebug ? JSON.stringify(window.__boardDebug) : ''",
+      expression: "window.__exhibitDebug ? JSON.stringify(window.__exhibitDebug) : ''",
       returnByValue: true,
     });
     return r.result && r.result.value ? JSON.parse(r.result.value) : null;
-  }, 15000, "board settle (__boardDebug)");
+  }, 15000, "exhibit settle (__exhibitDebug)");
   tab.close();
   return debug;
 }
@@ -310,17 +310,17 @@ function segIntersectsRect(x1, y1, x2, y2, rc) {
 // --- Run -----------------------------------------------------------------------
 
 async function main() {
-  console.log("contexts-mcp board-check");
+  console.log("contexts-mcp exhibit-check");
   console.log(`  data dir: ${dataDir}`);
   console.log("");
 
   const chrome = findChrome();
   if (!chrome) {
-    console.log("  SKIP  no Chrome/Edge found (set CHROME_PATH) — board geometry not verified");
+    console.log("  SKIP  no Chrome/Edge found (set CHROME_PATH) — exhibit geometry not verified");
     return;
   }
   if (typeof WebSocket === "undefined") {
-    console.log("  SKIP  Node < 22 (no built-in WebSocket) — board geometry not verified");
+    console.log("  SKIP  Node < 22 (no built-in WebSocket) — exhibit geometry not verified");
     return;
   }
 
@@ -356,9 +356,9 @@ async function main() {
     const debugPort = Number(dtap[0]);
     browser = await cdp(`ws://127.0.0.1:${debugPort}${dtap[1]}`);
 
-    const url = `http://127.0.0.1:${uiPort}/ctx/board-test/board-test`;
-    const d1 = await loadBoard(browser, debugPort, url);
-    const d2 = await loadBoard(browser, debugPort, url);
+    const url = `http://127.0.0.1:${uiPort}/ctx/exhibit-test/exhibit-test`;
+    const d1 = await loadExhibit(browser, debugPort, url);
+    const d2 = await loadExhibit(browser, debugPort, url);
     const kiosk = await probeKiosk(browser, debugPort, `${url}?step=1&play=400&kiosk=1`);
     const bodies = d1.bodies;
     const byId = Object.fromEntries(bodies.map((b) => [b.id, b]));
@@ -496,12 +496,12 @@ async function main() {
       }
     });
 
-    // --- Dense-board stress: the wild-agent failure shape ---
-    const d3 = await loadBoard(browser, debugPort, `http://127.0.0.1:${uiPort}/ctx/board-test/board-stress`);
+    // --- Dense-exhibit stress: the wild-agent failure shape ---
+    const d3 = await loadExhibit(browser, debugPort, `http://127.0.0.1:${uiPort}/ctx/exhibit-test/exhibit-stress`);
     const sBodies = d3.bodies;
     const sById = Object.fromEntries(sBodies.map((b) => [b.id, b]));
 
-    check("dense board: cluster rectangles still never overlap", () => {
+    check("dense exhibit: cluster rectangles still never overlap", () => {
       const TOL = 8; // the contact-projection pass should leave real clearance
       for (let i = 0; i < sBodies.length; i++)
         for (let j = i + 1; j < sBodies.length; j++) {
@@ -513,7 +513,7 @@ async function main() {
         }
     });
 
-    check("dense board: edge-linked figures settle adjacent, not a diagonal apart", () => {
+    check("dense exhibit: edge-linked figures settle adjacent, not a diagonal apart", () => {
       // Clear space allowed between linked cluster boxes: enough for a linked
       // satellite (a chip or note wired into the pair) to sit in the corridor,
       // nowhere near the original failure (pairs a full spiral apart).
@@ -528,7 +528,7 @@ async function main() {
       }
     });
 
-    check("dense board: every edge settles short at the unit level", () => {
+    check("dense exhibit: every edge settles short at the unit level", () => {
       // With groups, adjacency means the UNITS are close: a hub note against
       // the region it annotates counts as adjacent even though its target
       // member sits deep inside that region. Endpoints map to their group box
@@ -577,7 +577,7 @@ async function main() {
 
     check("rest ink follows locality: long annotative edges retract, structural edges stay", () => {
       const max = d3.annotRestMax;
-      if (typeof max !== "number") throw new Error("annotRestMax missing from __boardDebug");
+      if (typeof max !== "number") throw new Error("annotRestMax missing from __exhibitDebug");
       let retracted = 0, visible = 0;
       for (const e of d3.edges) {
         const A = sById[e.from], B = sById[e.to];
@@ -596,11 +596,11 @@ async function main() {
 
     check("kiosk mode strips the page chrome", () => {
       if (!kiosk.headerHidden) throw new Error("header still visible under ?kiosk=1");
-      if (!kiosk.introGone) throw new Error("board intro/breadcrumb still rendered under ?kiosk=1");
+      if (!kiosk.introGone) throw new Error("exhibit intro/breadcrumb still rendered under ?kiosk=1");
     });
 
     check("auto-play walks to the overview and signals done", () => {
-      if (!kiosk.playDone) throw new Error("window.__boardPlayDone never became true");
+      if (!kiosk.playDone) throw new Error("window.__exhibitPlayDone never became true");
     });
 
     check("edge chords rarely cross unrelated figures", () => {
@@ -638,10 +638,10 @@ async function main() {
     console.error(`${failed} check(s) failed.`);
     process.exit(1);
   }
-  console.log("All board checks passed.");
+  console.log("All exhibit checks passed.");
 }
 
 main().catch((err) => {
-  console.error(`board-check crashed: ${err instanceof Error ? err.stack || err.message : err}`);
+  console.error(`exhibit-check crashed: ${err instanceof Error ? err.stack || err.message : err}`);
   process.exit(1);
 });

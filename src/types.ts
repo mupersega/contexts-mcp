@@ -65,7 +65,7 @@ export interface ItemFrontmatter {
   tags: string[];
   created: string;
   updated: string;
-  // Opt-in alternate rendering for the web UI ("board" is the only value the UI
+  // Opt-in alternate rendering for the web UI ("exhibit" is the only value the UI
   // knows). Unknown values fall back to the normal document view; updateItem
   // round-trips the parsed frontmatter object, so the key survives edits.
   view?: string;
@@ -78,7 +78,7 @@ export interface ItemInfo {
   // Markdown-only (populated from frontmatter when present):
   title: string;       // falls back to the bare name for non-md items
   tags: string[];      // empty for non-md items
-  view?: string;       // md-only alternate rendering marker (e.g. "board")
+  view?: string;       // md-only alternate rendering marker (e.g. "exhibit")
   created: string;     // md: frontmatter; non-md: fs.stat birthtime/ctime
   updated: string;     // md: frontmatter; non-md: fs.stat mtime
   size: number;
@@ -300,7 +300,7 @@ export const SearchContextsArgsSchema = z.object({
 
 export const ContextDiagnoseArgsSchema = z.object({});
 
-const GUIDE_NAMES = ["migration", "mermaid", "board"] as const;
+const GUIDE_NAMES = ["migration", "mermaid", "exhibit"] as const;
 export const GetGuideArgsSchema = z.object({
   name: z.enum(GUIDE_NAMES),
 });

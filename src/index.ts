@@ -32,7 +32,7 @@ import { searchContexts, SearchResult } from "./search.js";
 import { loadConfig, MissingDataDirError, packageVersion } from "./config.js";
 
 const INSTRUCTIONS =
-  "Persistent context folders for Claude Code sessions. A context is a folder holding items in md (default), txt, json, yaml, yml, csv, or sql. Markdown items carry frontmatter (title, tags, timestamps); other kinds carry only filesystem metadata. Contexts themselves can carry optional metadata (title, description, free-form status, tags, links). Prefer search_contexts before answering topics that may already be logged, and prefer append_to_item on an existing item over creating parallel items. To change part of an existing item use edit_item (exact old_string -> new_string) rather than update_item, which rewrites the whole body. Large items are paged: get_item accepts offset/limit (lines). Items also form a graph: use search_contexts to find an entry point, then expand from it — get_item already appends a Connections footer, and get_item_links gives the full set of linked, back-linked, and related items. Backlinks in particular surface references that keyword search misses. Markdown supports mermaid fences (```mermaid) that render as SVG diagrams in the optional web UI — prefer them over hand-drawn ASCII art; call get_guide({ name: 'mermaid' }) for syntax. Markdown items with `view: board` frontmatter render as evidence boards — screenshots annotated with claims, built for presenting findings that map onto images (QA evidence, design review); agents are the intended authors. Call get_guide({ name: 'board' }) for the fence schema, presentation mode, and recordable walkthrough URLs.";
+  "Persistent context folders for Claude Code sessions. A context is a folder holding items in md (default), txt, json, yaml, yml, csv, or sql. Markdown items carry frontmatter (title, tags, timestamps); other kinds carry only filesystem metadata. Contexts themselves can carry optional metadata (title, description, free-form status, tags, links). Prefer search_contexts before answering topics that may already be logged, and prefer append_to_item on an existing item over creating parallel items. To change part of an existing item use edit_item (exact old_string -> new_string) rather than update_item, which rewrites the whole body. Large items are paged: get_item accepts offset/limit (lines). Items also form a graph: use search_contexts to find an entry point, then expand from it — get_item already appends a Connections footer, and get_item_links gives the full set of linked, back-linked, and related items. Backlinks in particular surface references that keyword search misses. Markdown supports mermaid fences (```mermaid) that render as SVG diagrams in the optional web UI — prefer them over hand-drawn ASCII art; call get_guide({ name: 'mermaid' }) for syntax. Markdown items with `view: exhibit` frontmatter render as exhibits — screenshots annotated with claims, built for presenting findings that map onto images (QA evidence, design review); agents are the intended authors. Call get_guide({ name: 'exhibit' }) for the fence schema, grouping, presentation mode, and recordable walkthrough URLs.";
 
 // Tool-result payload budget for a single get_item without an explicit limit.
 // Claude Code warns at ~10k tokens per MCP result and hard-truncates at ~25k;
@@ -293,24 +293,24 @@ classDiagram
 `;
 
 
-// The board guide is the system's own documentation for agents: everything
-// needed to author and drive an evidence board arrives through get_guide —
+// The exhibit guide is the system's own documentation for agents: everything
+// needed to author and drive an exhibit arrives through get_guide —
 // no external skill or README required.
-const BOARD_GUIDE = `# Evidence boards (view: board)
+const EXHIBIT_GUIDE = `# Exhibits (view: exhibit)
 
-A markdown item whose frontmatter has \`view: board\` renders in the web UI as an
-evidence board: a pannable canvas of screenshots with drawn annotations, instead
+A markdown item whose frontmatter has \`view: exhibit\` renders in the web UI
+as an exhibit: a pannable canvas of screenshots with drawn annotations, instead
 of a top-to-bottom document. Use one whenever findings map onto images — QA
-evidence, design review, before/after comparisons. Boards are FOR AGENTS to
+evidence, design review, before/after comparisons. Exhibits are FOR AGENTS to
 author: the file is plain text, and writing it in argument order also writes the
 presentation.
 
 ## Authoring
 
-The item body is ordinary markdown; the FIRST \`\`\`board fence is the board's
+The item body is ordinary markdown; the FIRST \`\`\`exhibit fence is the exhibit's
 declaration (JSON). Everything else in the body is shown only in ?doc=1 mode.
 
-\`\`\`board
+\`\`\`exhibit
 {
   "nodes": [
     { "id": "shot-a", "type": "figure", "src": "assets/checkout.png",
@@ -333,7 +333,7 @@ declaration (JSON). Everything else in the body is shown only in ?doc=1 mode.
   region's position is known or verified (you produced or measured the
   screenshot); a misplaced box is worse than no box. When unsure, use a point
   pin — it is forgiving. Write each pin's \`text\` as
-  a standalone claim; the board is a claims graph that happens to render
+  a standalone claim; the exhibit is a claims graph that happens to render
   spatially.
 - item: \`link\` is a wiki target ("item" in this context, or "ctx/item");
   renders as a clickable chip. note: free-text card.
@@ -350,16 +350,16 @@ declaration (JSON). Everything else in the body is shown only in ?doc=1 mode.
 ## Order is the presentation
 
 Declaration order of nodes (and each figure's pins) IS the step order of the
-board's built-in presentation mode. Write the fence in the order the argument
+exhibit's built-in presentation mode. Write the fence in the order the argument
 should unfold; the overview is the final step.
 
 ## URLs (for driving or recording a walkthrough)
 
-- /ctx/<context>/<item> — the board. ?doc=1 — same item as a document.
+- /ctx/<context>/<item> — the exhibit. ?doc=1 — same item as a document.
 - ?step=N — enter presentation at step N (deep-linkable).
 - ?step=1&play=<ms>&kiosk=1 — auto-advance every <ms> milliseconds, page
   chrome hidden: the recordable URL. On reaching the overview the page sets
-  window.__boardPlayDone = true and dispatches "board-play-done". Any user
+  window.__exhibitPlayDone = true and dispatches "exhibit-play-done". Any user
   input cancels auto-play. Layout is deterministic, so every run frames
   identically.
 `;
@@ -367,7 +367,7 @@ should unfold; the overview is the final step.
 const GUIDES: Record<string, string> = {
   migration: MIGRATION_GUIDE,
   mermaid: MERMAID_GUIDE,
-  board: BOARD_GUIDE,
+  exhibit: EXHIBIT_GUIDE,
 };
 
 // One factory serves both protocol eras: serveStdio pins one instance per
@@ -748,7 +748,7 @@ server.registerTool(
 server.registerTool(
   "get_guide",
   {
-    description: "Return a built-in guide. Available: 'migration' (importing existing markdown corpora), 'mermaid' (writing diagrams that render as SVG in the web UI), 'board' (authoring evidence boards: view: board items that render screenshots with drawn annotations, presentation mode, recordable walkthrough URLs).",
+    description: "Return a built-in guide. Available: 'migration' (importing existing markdown corpora), 'mermaid' (writing diagrams that render as SVG in the web UI), 'exhibit' (authoring exhibits: view: exhibit items that render screenshots with drawn annotations, grouping, presentation mode, recordable walkthrough URLs).",
     inputSchema: GetGuideArgsSchema,
     annotations: READ_ONLY,
   },

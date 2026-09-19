@@ -31,7 +31,7 @@ import {
   searchPage,
   themeLabPage,
   graphPage,
-  boardViewPage,
+  exhibitViewPage,
   anchorHeadings,
   TocEntry,
 } from "./templates.js";
@@ -471,10 +471,11 @@ app.post("/ctx/:context/assets/:filename/reveal", (req, res) => {
   }
 });
 
-// The first ```board fence in a `view: board` item is the board's declaration.
+// The first ```exhibit fence in a `view: exhibit` item is the exhibit's
+// declaration; ```exhibit / view: exhibit are legacy aliases.
 // Tolerant of trailing whitespace after the language tag and CRLF bodies.
-function extractBoardFence(md: string): string | null {
-  const m = /```board[ \t]*\r?\n([\s\S]*?)\r?\n[ \t]*```/.exec(md);
+function extractExhibitFence(md: string): string | null {
+  const m = /```exhibit[ \t]*\r?\n([\s\S]*?)\r?\n[ \t]*```/.exec(md);
   return m ? m[1] : null;
 }
 
@@ -485,26 +486,26 @@ app.get("/ctx/:context/:item", async (req, res) => {
     const rawMode = parseTruthy(req.query.raw);
     const item = await storage.getItem(context, itemName, preferred);
     const isMarkdown = item.extension === "md";
-    // Board view: opt-in via `view: board` frontmatter, with ?doc=1 as the
+    // Exhibit view: opt-in via `view: exhibit` frontmatter, with ?doc=1 as the
     // escape hatch back to the document rendering. Any defect in the fence
     // (missing, unparseable, no nodes) falls through to the document view,
     // where the fence shows as an ordinary code block — never a dead page.
-    if (isMarkdown && !rawMode && item.frontmatter?.view === "board" && !parseTruthy(req.query.doc)) {
-      const fence = extractBoardFence(item.content);
-      let board: unknown = null;
+    if (isMarkdown && !rawMode && item.frontmatter?.view === "exhibit" && !parseTruthy(req.query.doc)) {
+      const fence = extractExhibitFence(item.content);
+      let exhibit: unknown = null;
       try {
-        board = fence ? JSON.parse(fence) : null;
+        exhibit = fence ? JSON.parse(fence) : null;
       } catch {
-        board = null;
+        exhibit = null;
       }
       if (
         fence &&
-        board &&
-        typeof board === "object" &&
-        Array.isArray((board as { nodes?: unknown }).nodes) &&
-        ((board as { nodes: unknown[] }).nodes.length > 0)
+        exhibit &&
+        typeof exhibit === "object" &&
+        Array.isArray((exhibit as { nodes?: unknown }).nodes) &&
+        ((exhibit as { nodes: unknown[] }).nodes.length > 0)
       ) {
-        res.send(boardViewPage(context, itemName, item.frontmatter?.title || itemName, fence, parseTruthy(req.query.kiosk)));
+        res.send(exhibitViewPage(context, itemName, item.frontmatter?.title || itemName, fence, parseTruthy(req.query.kiosk)));
         return;
       }
     }
@@ -547,8 +548,8 @@ app.get("/ctx/:context/:item", async (req, res) => {
         hasBackup,
         toc,
         connections,
-        // board items viewed as documents (?doc=1) get a way back to the board
-        isMarkdown && item.frontmatter?.view === "board",
+        // exhibits viewed as documents (?doc=1) get a way back to the exhibit
+        isMarkdown && item.frontmatter?.view === "exhibit",
       )
     );
   } catch (err: unknown) {

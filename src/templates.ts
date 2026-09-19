@@ -693,7 +693,7 @@ function itemCardInner(context: string, item: ItemInfo): string {
   return `
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <div>
-          <h3><span class="item-kind${item.view === "board" ? " item-kind-board" : ""}">${item.view === "board" ? "BOARD" : item.extension.toUpperCase()}</span><a href="/ctx/${esc(context)}/${esc(item.name)}?ext=${esc(item.extension)}">${esc(item.title)}</a></h3>
+          <h3><span class="item-kind${item.view === "exhibit" ? " item-kind-exhibit" : ""}">${item.view === "exhibit" ? "EXHIBIT" : item.extension.toUpperCase()}</span><a href="/ctx/${esc(context)}/${esc(item.name)}?ext=${esc(item.extension)}">${esc(item.title)}</a></h3>
           <div class="meta">${esc(item.name)}.${esc(item.extension)} &middot; updated ${esc(itemRelDate(item.updated))}</div>
           ${item.tags.length ? `<div>${tags(item.tags)}</div>` : ""}
         </div>
@@ -775,7 +775,7 @@ export function itemListPage(
 // Kept minimal to suit the terminal aesthetic; sit as a row in the sticky topbar.
 const ICONS: Record<string, string> = {
   copy: `<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.2" y="5.2" width="8.3" height="8.3" rx="1.4"/><path d="M3.2 10.8 H2.9 A1.4 1.4 0 0 1 1.5 9.4 V2.9 A1.4 1.4 0 0 1 2.9 1.5 H9.4 A1.4 1.4 0 0 1 10.8 2.9 V3.2"/></svg>`,
-  board: `<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.8" y="2.5" width="6.2" height="4.8" rx="0.8"/><rect x="8.8" y="9" width="5.4" height="4.3" rx="0.8"/><path d="M7.6 5.6 L10.6 9"/><circle cx="12.1" cy="4.3" r="1.4"/></svg>`,
+  exhibit: `<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.8" y="2.5" width="6.2" height="4.8" rx="0.8"/><rect x="8.8" y="9" width="5.4" height="4.3" rx="0.8"/><path d="M7.6 5.6 L10.6 9"/><circle cx="12.1" cy="4.3" r="1.4"/></svg>`,
   download: `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2 V9.6"/><path d="M4.8 6.6 L8 9.9 L11.2 6.6"/><path d="M2.6 13 H13.4"/></svg>`,
   code: `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.6 4.4 L2 8 L5.6 11.6"/><path d="M10.4 4.4 L14 8 L10.4 11.6"/></svg>`,
   doc: `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.3 H9 L12 5.3 V13.7 H4 Z"/><path d="M9 2.3 V5.3 H12"/><path d="M5.9 8.4 H10.1 M5.9 10.6 H10.1"/></svg>`,
@@ -800,7 +800,7 @@ export function itemViewPage(
   hasBackup: boolean = false,
   toc: TocEntry[] = [],
   connections: ItemConnections | null = null,
-  isBoard: boolean = false,
+  isExhibit: boolean = false,
 ): string {
   const appendSupported =
     !rawMode && (isMarkdown || extension === "txt" || extension === "csv" || extension === "sql");
@@ -883,7 +883,7 @@ export function itemViewPage(
         <a href="/">Contexts</a> / <a href="/ctx/${esc(context)}">${esc(context)}</a> / <strong>${esc(name)}.${esc(extension)}</strong>${rawMode ? ' <span style="color:var(--text-dim);">(raw)</span>' : ""}
       </div>
       <div class="doc-actions">
-        ${isBoard ? `<a class="icon-btn" href="${viewUrl}" title="Board view" aria-label="Board view">${icon("board")}</a>` : ""}
+        ${isExhibit ? `<a class="icon-btn" href="${viewUrl}" title="Exhibit view" aria-label="Exhibit view">${icon("exhibit")}</a>` : ""}
         <button type="button" class="icon-btn" data-copy-raw="${rawUrl}" data-ext="${esc(extension)}" title="${isMarkdown ? "Copy body (Alt = include frontmatter)" : "Copy raw content"}" aria-label="Copy">${icon("copy")}</button>
         <a class="icon-btn" href="${rawUrl}&amp;download=1" title="Download" aria-label="Download">${icon("download")}</a>
         <a class="icon-btn${rawMode ? " is-active" : ""}" href="${rawToggleHref}" title="${rawToggleLabel}" aria-label="${rawToggleLabel}">${icon(rawMode ? "doc" : "code")}</a>
@@ -938,7 +938,7 @@ const GRAPH_SCRIPT = `
   }
   var cs = getComputedStyle(document.documentElement);
   function v(name, fb){ var x = cs.getPropertyValue(name).trim(); return x || fb; }
-  // Same live-theme rule as the board view: re-resolve tokens on root
+  // Same live-theme rule as the exhibit view: re-resolve tokens on root
   // attribute changes so a dark/light toggle never leaves stale canvas ink.
   var ACCENT, MUTED, DIM, BRIGHT, TEXT, BG;
   function refreshColors(){
@@ -1284,8 +1284,8 @@ export function graphPage(
   );
 }
 
-// Board-view client script (view: board markdown items). Renders the item's
-// \`\`\`board fence — figures with region pins, notes, item chips, edges — onto a
+// Exhibit-view client script (view: exhibit markdown items). Renders the item's
+// \`\`\`exhibit fence — figures with region pins, notes, item chips, edges — onto a
 // pan/zoom canvas. Layout is deterministic: per-figure callout labels are placed
 // by a legend-layout pass (no physics), and only the resulting cluster
 // rectangles are packed by a small force relax, seeded from a hash of the fence
@@ -1294,20 +1294,20 @@ export function graphPage(
 // no dragging, no reheat; the camera is the only thing that moves. No backticks
 // or \${} inside, and no literal backslash — this string is interpolated into a
 // template literal.
-const BOARD_SCRIPT = `
+const EXHIBIT_SCRIPT = `
 (function(){
-  var canvas = document.getElementById('board-canvas');
+  var canvas = document.getElementById('exhibit-canvas');
   if (!canvas || !canvas.getContext) return;
   var ctx = canvas.getContext('2d');
-  var wrap = document.getElementById('board-wrap');
-  var empty = document.getElementById('board-empty');
-  var dataEl = document.getElementById('board-data');
+  var wrap = document.getElementById('exhibit-wrap');
+  var empty = document.getElementById('exhibit-empty');
+  var dataEl = document.getElementById('exhibit-data');
   var CURCTX = wrap.getAttribute('data-context') || '';
   function fail(msg){ canvas.style.display='none'; if (empty){ empty.textContent = msg; empty.style.display='block'; } }
   var spec = null;
-  try { spec = JSON.parse(dataEl.textContent); } catch (e) { fail('Could not parse the board fence.'); return; }
+  try { spec = JSON.parse(dataEl.textContent); } catch (e) { fail('Could not parse the exhibit fence.'); return; }
   var specNodes = (spec && Array.isArray(spec.nodes)) ? spec.nodes : [];
-  if (!specNodes.length){ fail('The board declares no nodes.'); return; }
+  if (!specNodes.length){ fail('The exhibit declares no nodes.'); return; }
 
   var DPR = Math.min(window.devicePixelRatio || 1, 2);
   var W = 800, H = 480;
@@ -1338,7 +1338,7 @@ const BOARD_SCRIPT = `
   // Deterministic settle: FNV-1a of the fence text seeds a mulberry32 PRNG, so
   // the same file always lays out the same way and screenshots are reproducible.
   // No positions are ever stored — the fence stays declarative and an agent can
-  // regenerate the whole board without destroying anyone's arrangement.
+  // regenerate the whole exhibit without destroying anyone's arrangement.
   var seed = 2166136261 >>> 0;
   (function(){ var s = dataEl.textContent; for (var i=0;i<s.length;i++){ seed ^= s.charCodeAt(i); seed = Math.imul(seed, 16777619) >>> 0; } })();
   function rnd(){ seed = (seed + 0x6D2B79F5) >>> 0; var t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }
@@ -1400,7 +1400,7 @@ const BOARD_SCRIPT = `
   // --- Presentation mode ---
   // The order IS the file: bodies in nodes[] order, then each figure's pins in
   // declaration order, take 1-based step numbers (assigned in start()). cur >
-  // stepsTotal means the whole board — the default view. An edge appears once
+  // stepsTotal means the whole exhibit — the default view. An edge appears once
   // everything it touches has. No schema, no stored sequence: an agent writing
   // the fence in argument order has already written the presentation.
   var stepsTotal = 0, cur = 0, nowMs = 0, ANIM = 650;
@@ -1431,7 +1431,7 @@ const BOARD_SCRIPT = `
   }
 
   // Auto-advance (?play=<ms> or the auto link); any real input hands control
-  // back to the human. Completion raises the __boardPlayDone signal.
+  // back to the human. Completion raises the __exhibitPlayDone signal.
   var playTimer = 0;
   function stopPlay(){ if (playTimer){ clearInterval(playTimer); playTimer = 0; } }
   function startPlay(dwell){
@@ -1441,8 +1441,8 @@ const BOARD_SCRIPT = `
       else {
         stopPlay();
         setTimeout(function(){
-          window.__boardPlayDone = true;
-          window.dispatchEvent(new Event('board-play-done'));
+          window.__exhibitPlayDone = true;
+          window.dispatchEvent(new Event('exhibit-play-done'));
         }, 900);
       }
     }, dwell);
@@ -1485,7 +1485,7 @@ const BOARD_SCRIPT = `
     if (byId[b.id]) return; // duplicate id — first declaration wins
     byId[b.id] = b; bodies.push(b);
   });
-  if (!bodies.length){ fail('The board declares no usable nodes.'); return; }
+  if (!bodies.length){ fail('The exhibit declares no usable nodes.'); return; }
 
   (Array.isArray(spec.edges) ? spec.edges : []).forEach(function(e){
     if (!e || e.from == null || e.to == null) return;
@@ -1497,7 +1497,7 @@ const BOARD_SCRIPT = `
     var a = end(e.from), z = end(e.to);
     if (a && z && a.b !== z.b){
       // Two edge classes with different rights. Structural (figure-to-figure
-      // pin bonds) are the board's skeleton: full spring, full-time ink.
+      // pin bonds) are the exhibit's skeleton: full spring, full-time ink.
       // Annotative (note/chip commentary onto figures) are drape: weak spring
       // so four cross-study hubs cannot out-muscle a pair bond, and resting
       // ink only while local (set after settle).
@@ -1523,7 +1523,7 @@ const BOARD_SCRIPT = `
   }
 
   // [[wiki-link]] resolution mirrors the server's: bare names live in the
-  // board's own context, ctx/item crosses contexts, |alias renames the chip.
+  // exhibit's own context, ctx/item crosses contexts, |alias renames the chip.
   function parseLink(link){
     var s = String(link || '');
     if (s.slice(0,2) === '[[' && s.slice(-2) === ']]') s = s.slice(2, -2);
@@ -1660,7 +1660,7 @@ const BOARD_SCRIPT = `
   // springs on declared edges, gentle gravity. Returns max speed so the relax
   // loop can stop when calm.
   // The sim, parameterized so it can run TWICE: once inside each group
-  // (members arranging themselves), once across the board (ungrouped bodies +
+  // (members arranging themselves), once across the exhibit (ungrouped bodies +
   // group super-boxes). Same mechanism as figure+labels, recursed one level.
   // units carry x/y/vx/vy/hw/hh/ulk; springs are {A, Z, annot}.
   function relaxTick(units, springs){
@@ -2144,6 +2144,10 @@ const BOARD_SCRIPT = `
     }
   });
   canvas.addEventListener('wheel', function(ev){
+    // plain scroll belongs to the page (the canvas is tall — hijacking the
+    // wheel trapped scrolling). Zoom is ctrl+scroll, which is also how
+    // browsers deliver a trackpad pinch.
+    if (!ev.ctrlKey) return;
     ev.preventDefault();
     stopPlay();
     camT.on = false;
@@ -2173,23 +2177,31 @@ const BOARD_SCRIPT = `
       if (stepsTotal > 0){ gotoStep(1); markReveals(1); ev.preventDefault(); }
     }
   });
-  var pres = document.getElementById('board-present');
+  // Present is a toggle through the walkthrough's two poles: from the full
+  // exhibit it starts a fresh run; mid-run it jumps straight to the finished
+  // exhibit (no stepping through the tail one by one); from there, back to the
+  // start. Arrows keep working at either pole.
+  var pres = document.getElementById('exhibit-present');
   if (pres) pres.addEventListener('click', function(ev){
     ev.preventDefault();
     stopPlay();
-    gotoStep(1);
-    markReveals(1); // restarting should draw the first reveal, not just show it
+    if (cur <= stepsTotal){
+      gotoStep(stepsTotal + 1);
+    } else {
+      gotoStep(1);
+      markReveals(1); // a fresh run draws the first reveal, not just shows it
+    }
   });
   // Auto-present straight from the toolbar: same run as ?play=1, no URL
   // knowledge required (the href is the no-JS fallback).
-  var auto = document.getElementById('board-auto');
+  var auto = document.getElementById('exhibit-auto');
   if (auto) auto.addEventListener('click', function(ev){
     ev.preventDefault();
     gotoStep(1);
     markReveals(1);
     startPlay(2500);
   });
-  var zi = document.getElementById('board-zoom-in'), zo = document.getElementById('board-zoom-out'), zf = document.getElementById('board-fit');
+  var zi = document.getElementById('exhibit-zoom-in'), zo = document.getElementById('exhibit-zoom-out'), zf = document.getElementById('exhibit-fit');
   if (zi) zi.addEventListener('click', function(){ zoomBy(1.3); });
   if (zo) zo.addEventListener('click', function(){ zoomBy(1/1.3); });
   if (zf) zf.addEventListener('click', function(){ fitView(60); });
@@ -2208,7 +2220,7 @@ const BOARD_SCRIPT = `
       b.pins.forEach(function(p){ p.stepIdx = ++sc; p.revT = 0; });
     });
     stepsTotal = sc;
-    cur = stepsTotal + 1; // default view: the whole board, no ceremony
+    cur = stepsTotal + 1; // default view: the whole exhibit, no ceremony
     edges.forEach(function(e){
       var ai = e.a.b.stepIdx, zi = e.z.b.stepIdx;
       if (e.a.pin) e.a.b.pins.forEach(function(p){ if (p.id === e.a.pin) ai = p.stepIdx; });
@@ -2289,10 +2301,10 @@ const BOARD_SCRIPT = `
       e.vA = e.restVisible ? 1 : 0;
     });
     fitView(60);
-    // Settled geometry, exposed for the board-check harness (scripts/
-    // board-check.js) to assert against — the numbers the real renderer uses,
+    // Settled geometry, exposed for the exhibit-check harness (scripts/
+    // exhibit-check.js) to assert against — the numbers the real renderer uses,
     // not a parallel reimplementation. Not part of any supported page API.
-    window.__boardDebug = {
+    window.__exhibitDebug = {
       labelW: LABEL_W,
       annotRestMax: ANNOT_REST_MAX,
       stepCount: stepsTotal,
@@ -2314,11 +2326,11 @@ const BOARD_SCRIPT = `
       })
     };
     // ?step=N enters presentation at that step (camera snapped, no catch-up
-    // animation for everything already on the board by then).
+    // animation for everything already on the exhibit by then).
     var q = new URLSearchParams(location.search).get('step');
     if (q && stepsTotal > 0) gotoStep(parseInt(q, 10) || 1, true);
     // ?play=<ms>: hands-free walkthrough for recording rigs. Reaching the
-    // overview sets window.__boardPlayDone and fires "board-play-done" so a
+    // overview sets window.__exhibitPlayDone and fires "exhibit-play-done" so a
     // driving agent knows when the take is over.
     var pq = new URLSearchParams(location.search).get('play');
     if (pq && stepsTotal > 0){
@@ -2330,7 +2342,7 @@ const BOARD_SCRIPT = `
   // Layout gates: every figure image, plus the webfont. Font metrics feed
   // measureText, measureText feeds label wrapping, wrapping feeds cluster
   // sizes — measuring before the font resolves makes the settle depend on a
-  // network race (board-check caught exactly this as a determinism failure).
+  // network race (exhibit-check caught exactly this as a determinism failure).
   var gates = 1; // the font gate; each figure image arms one more
   function gateDone(){ if (--gates === 0) start(); }
   bodies.forEach(function(b){
@@ -2348,17 +2360,17 @@ const BOARD_SCRIPT = `
 })();
 `;
 
-// A \`view: board\` markdown item rendered as an evidence board. The route has
+// A \`view: exhibit\` markdown item rendered as an evidence exhibit. The route has
 // already validated that fenceRaw parses as JSON with a nodes array; it is
 // embedded as an application/json script tag (with < escaped so a string value
-// can never close the tag) and drawn by BOARD_SCRIPT. ?doc=1 is the escape
+// can never close the tag) and drawn by EXHIBIT_SCRIPT. ?doc=1 is the escape
 // hatch back to the ordinary document rendering of the same item.
-export function boardViewPage(
+export function exhibitViewPage(
   context: string,
   itemName: string,
   title: string,
   fenceRaw: string,
-  // kiosk (?kiosk=1): board only, no chrome — the recordable presentation
+  // kiosk (?kiosk=1): exhibit only, no chrome — the recordable presentation
   // surface (layout hides the header/footer; we skip our own breadcrumb/title)
   kiosk: boolean = false,
 ): string {
@@ -2368,23 +2380,23 @@ export function boardViewPage(
     : `
       <div class="breadcrumb"><a href="/">Contexts</a> / <a href="/ctx/${encodeURIComponent(context)}">${esc(context)}</a> / <strong>${esc(itemName)}</strong></div>
       <h2>${esc(title)}</h2>
-      <p class="graph-intro">Evidence board. <span class="graph-hint">Scroll to zoom, drag to pan, double-click empty space to fit. Click a chip to open its item, a figure to open the full image. Present steps through the board in file order.</span>
-        <a href="${self}?step=1" id="board-present">present</a> &middot; <a href="${self}?step=1&amp;play=1" id="board-auto">auto</a> &middot; <a href="${self}?doc=1">document view</a> &middot; <a href="${self}?raw=1">raw</a> &middot; <a href="${self}/edit">edit</a></p>`;
+      <p class="graph-intro"><span class="graph-hint">Ctrl+scroll (or pinch) to zoom, drag to pan, double-click empty space to fit. Click a chip to open its item, a figure to open the full image. Present toggles the walkthrough: start, jump to finished, restart; arrows step.</span>
+        <a href="${self}?step=1" id="exhibit-present">present</a> &middot; <a href="${self}?step=1&amp;play=1" id="exhibit-auto">auto</a> &middot; <a href="${self}?doc=1">document view</a> &middot; <a href="${self}?raw=1">raw</a> &middot; <a href="${self}/edit">edit</a></p>`;
   return layout(
     title,
     `
-    <div class="board-page">${pageChrome}
-      <div id="board-wrap" data-context="${esc(context)}">
-        <canvas id="board-canvas"></canvas>
+    <div class="exhibit-page">${pageChrome}
+      <div id="exhibit-wrap" data-context="${esc(context)}">
+        <canvas id="exhibit-canvas"></canvas>
         <div class="graph-controls" aria-hidden="true">
-          <button type="button" id="board-zoom-in" title="Zoom in">+</button>
-          <button type="button" id="board-fit" title="Fit board to view">&#9633;</button>
-          <button type="button" id="board-zoom-out" title="Zoom out">&minus;</button>
+          <button type="button" id="exhibit-zoom-in" title="Zoom in">+</button>
+          <button type="button" id="exhibit-fit" title="Fit exhibit to view">&#9633;</button>
+          <button type="button" id="exhibit-zoom-out" title="Zoom out">&minus;</button>
         </div>
-        <div id="board-empty" class="empty" style="display:none;"></div>
+        <div id="exhibit-empty" class="empty" style="display:none;"></div>
       </div>
-      <script type="application/json" id="board-data">${fenceRaw.replace(/</g, "\\u003c")}</script>
-      <script>${BOARD_SCRIPT}</script>
+      <script type="application/json" id="exhibit-data">${fenceRaw.replace(/</g, "\\u003c")}</script>
+      <script>${EXHIBIT_SCRIPT}</script>
     </div>`,
     { fullWidth: true, kiosk }
   );
