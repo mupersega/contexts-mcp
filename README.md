@@ -168,7 +168,7 @@ All tools the server exposes:
 - `rebuild_graph` — rebuild the graph on demand. Automatic rebuilds (after writes, in the background) are incremental: only changed items are re-read, re-tokenized and re-scored, and neighbour lists are patched in place (about 100 ms at a few thousand items). `mode: 'full'` (the default here, and the button on the `/graph` page) drops every cache and runs the exact all-pairs similarity for the best link quality, which can take minutes on a large corpus. Returns what the build did: pass (`incremental`, `pruned-full`, `exact`), items re-indexed and re-scored, time.
 - `add_attachment` / `list_attachments` / `delete_attachment` — binary files in a context's `assets/` folder.
 - `context_diagnose` — return `{dataDir, configPath, version, contextCount, archivedCount, itemCount, totalBytes, lastScanMs}`. Cheap to call. Confirms "what data dir is this process actually reading?" when things look wrong.
-- `get_guide` — built-in guides: `migration` (importing existing notes) and `mermaid` (diagrams that render in the UI).
+- `get_guide` — built-in guides: `migration` (importing existing notes), `mermaid` (diagrams that render in the UI), and `exhibit` (annotated-screenshot exhibits: `view: exhibit` items, grouping, presentation mode, recordable walkthroughs).
 
 The server speaks MCP 2026-07-28 (stateless core, `server/discover`, cache hints on `tools/list`) and still serves the 2025 `initialize` handshake to older hosts. Every tool carries `readOnlyHint` / `destructiveHint` annotations.
 

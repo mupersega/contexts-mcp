@@ -98,7 +98,9 @@ export async function searchContexts(
   const tagFilterLower = opts.tagFilter?.map((t) => t.toLowerCase());
   const metaFilter: ContextMetaFilter = { includeArchived, contextStatusLower, contextTagsLower };
   const limit = opts.limit && opts.limit > 0 ? opts.limit : DEFAULT_SEARCH_LIMIT;
-  const linesPerItem = opts.linesPerItem && opts.linesPerItem > 0 ? opts.linesPerItem : DEFAULT_LINES_PER_ITEM;
+  // 0 is a documented value ("titles only") — a falsy-zero check would
+  // silently turn it back into the default.
+  const linesPerItem = opts.linesPerItem !== undefined && opts.linesPerItem >= 0 ? opts.linesPerItem : DEFAULT_LINES_PER_ITEM;
   const needsMeta =
     contextStatusLower !== undefined || (contextTagsLower !== undefined && contextTagsLower.length > 0);
   const contextFilter = opts.contextFilter && CONTEXT_NAME_REGEX.test(opts.contextFilter) ? opts.contextFilter : undefined;

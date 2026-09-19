@@ -57,6 +57,12 @@ async function writeFileAtomic(filePath: string, content: string): Promise<void>
   try {
     await fs.writeFile(tmp, content, "utf-8");
     await fs.rename(tmp, filePath);
+    // Drop any size+mtime-keyed cache entry for this path: a same-length
+    // rewrite inside the filesystem's mtime granularity (coarse on some
+    // mounts; routine for fixed-width timestamp rewrites) would otherwise be
+    // served stale forever.
+    _metaCache.delete(filePath);
+    _docCache.delete(filePath);
   } catch (err) {
     await fs.rm(tmp, { force: true }).catch(() => {});
     throw err;

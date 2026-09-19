@@ -472,7 +472,7 @@ app.post("/ctx/:context/assets/:filename/reveal", (req, res) => {
 });
 
 // The first ```exhibit fence in a `view: exhibit` item is the exhibit's
-// declaration; ```exhibit / view: exhibit are legacy aliases.
+// declaration. The spelling is exactly "exhibit" — there are no aliases.
 // Tolerant of trailing whitespace after the language tag and CRLF bodies.
 function extractExhibitFence(md: string): string | null {
   const m = /```exhibit[ \t]*\r?\n([\s\S]*?)\r?\n[ \t]*```/.exec(md);
@@ -686,12 +686,12 @@ app.get("/search", async (req, res) => {
 
   // The web page lists everything (it renders a scrollable page, not a
   // model's context window), so lift the MCP-oriented default limit.
-  const { results } = await searchContexts(storage.getDataDir(), q, {
+  const { results, total } = await searchContexts(storage.getDataDir(), q, {
     contextFilter: context || undefined,
     includeArchived,
     limit: 500,
   });
-  res.send(searchPage(results, q, context, contextNames, includeArchived));
+  res.send(searchPage(results, q, context, contextNames, includeArchived, total));
 });
 
 // --- Diagnose ---

@@ -425,6 +425,7 @@ const FULL_PASS_RATIO = 0.1;
 interface DiskIndex {
   version: number;
   similarity: string; // which backend the neighbour lists were scored by
+  sinceFull?: number; // cumulative incremental touches since the last full pruned pass
   docs: Record<string, DocIndexEntry>;
 }
 
@@ -440,6 +441,7 @@ async function loadIndex(): Promise<Map<string, DocIndexEntry>> {
   const disk = (await storage.readGraphIndexFile()) as DiskIndex | null;
   if (disk && typeof disk === "object" && disk.version === INDEX_VERSION && disk.docs && typeof disk.docs === "object") {
     _indexSimilarity = typeof disk.similarity === "string" ? disk.similarity : "";
+    _sinceFull = typeof disk.sinceFull === "number" ? disk.sinceFull : 0;
     for (const [id, e] of Object.entries(disk.docs)) {
       if (e && typeof e.size === "number" && typeof e.mtimeMs === "number" && Array.isArray(e.tf) && Array.isArray(e.links)) {
         _index.set(id, e);
@@ -505,6 +507,13 @@ export interface BuildStats {
 }
 
 let _lastBuild: BuildStats | null = null;
+// Debounce scales from AUTO build cost only — a manual multi-minute exact
+// pass must not push the next ~100 ms incremental rebuild minutes away.
+let _lastAutoMs = 0;
+// Incremental patches only ever thin neighbour lists (an evicted 5th-best is
+// never re-found), so track cumulative touches since the last corrective
+// full pass; persisted in the index file so restarts don't reset the drift.
+let _sinceFull = 0;
 export function lastBuildStats(): BuildStats | null {
   return _lastBuild;
 }
@@ -573,7 +582,7 @@ async function buildGraphWithArchived(
   const touched = changed.length + deleted.length;
   let pass: BuildStats["pass"];
   if (mode === "full") pass = "exact";
-  else if (!hasNeighbors || touched > Math.max(50, Math.floor(ids.length * FULL_PASS_RATIO))) pass = "pruned-full";
+  else if (!hasNeighbors || touched + _sinceFull > Math.max(50, Math.floor(ids.length * FULL_PASS_RATIO))) pass = "pruned-full";
   else pass = "incremental";
   let rescored = 0;
 
@@ -695,7 +704,9 @@ async function buildGraphWithArchived(
   if (rescored > 0 || deleted.length > 0 || mode === "full") {
     const docs: Record<string, DocIndexEntry> = {};
     for (const [id, e] of index) docs[id] = e;
-    await storage.writeGraphIndexFile({ version: INDEX_VERSION, similarity: effectiveKey, docs } satisfies DiskIndex);
+    if (pass === "incremental") _sinceFull += touched;
+  else _sinceFull = 0;
+  await storage.writeGraphIndexFile({ version: INDEX_VERSION, similarity: effectiveKey, sinceFull: _sinceFull, docs } satisfies DiskIndex);
   }
 
   const stats: BuildStats = {
@@ -709,6 +720,7 @@ async function buildGraphWithArchived(
     similarity: effectiveBackend,
   };
   _lastBuild = stats;
+  if (stats.pass !== "exact") _lastAutoMs = stats.ms;
   return { graph: { nodes, edges }, archived, stats };
 }
 
@@ -837,7 +849,7 @@ function kickRebuild(mode: BuildMode = "auto"): Promise<void> {
 }
 
 function debounceMs(): number {
-  return Math.max(REBUILD_DEBOUNCE_MS, (_lastBuild?.ms ?? 0) * 2);
+  return Math.max(REBUILD_DEBOUNCE_MS, _lastAutoMs * 2);
 }
 
 function scheduleRebuild(): void {
@@ -881,7 +893,12 @@ export async function getGraph(includeArchived = false): Promise<Graph> {
   }
 
   await kickRebuild();
-  return _cache.get(key)!;
+  const built = _cache.get(key);
+  if (built) return built;
+  // kickRebuild logs and swallows failures for the background refresh path; a
+  // cold start has nothing to serve, so surface a real error instead of
+  // returning undefined into every caller's `.nodes`.
+  throw new Error("graph build failed on cold start — see the server log for the cause");
 }
 
 // Resolve once no rebuild is pending or in flight and the cache matches the

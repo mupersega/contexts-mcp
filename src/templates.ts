@@ -2717,7 +2717,13 @@ export function searchPage(
   contextFilter: string,
   contexts: string[],
   includeArchived: boolean = false,
+  total: number | null = null,
 ): string {
+  // when the page's hard cap truncated the result set, say so
+  const truncNote =
+    results !== null && total !== null && total > results.length
+      ? `<div class="meta" style="margin-bottom:0.6rem;">Showing ${results.length} of ${total} matching items.</div>`
+      : "";
   const contextOptions = contexts
     .map(
       (c) =>
@@ -2729,7 +2735,7 @@ export function searchPage(
     results === null
       ? ""
       : results.length
-        ? results
+        ? truncNote + results
             .map(
               (r) => `
         <div class="card">

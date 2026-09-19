@@ -66,7 +66,13 @@ export function pageLines(
   // A trailing newline is not an extra (empty) line.
   if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
   const total = lines.length;
-  const start = Math.min(Math.max((offset ?? 1) - 1, 0), Math.max(total - 1, 0));
+  const requested = Math.max((offset ?? 1) - 1, 0);
+  if (requested >= total) {
+    // Paging past the end must say so — clamping to the last line returns
+    // plausible-looking content for the wrong lines.
+    return { text: "", header: `[offset ${offset} is beyond the end of the item (${total} lines)]` };
+  }
+  const start = requested;
   let end: number;
   if (limit !== undefined) {
     end = Math.min(total, start + limit);
@@ -779,7 +785,7 @@ server.registerTool(
 return server;
 }
 
-function main(): void {
+async function main(): Promise<void> {
   try {
     const cfg = loadConfig();
     console.error(`[contexts-mcp] version:   ${packageVersion()}`);
@@ -795,10 +801,13 @@ function main(): void {
     throw err;
   }
 
-  storage.ensureDataDir().catch((err) => {
+  try {
+    // Await: the server must not accept tool calls before the data dir exists.
+    await storage.ensureDataDir();
+  } catch (err) {
     console.error("[contexts-mcp] Fatal:", err);
     process.exit(1);
-  });
+  }
 
   serveStdio(() => buildServer(), {
     onerror: (err) => console.error("[contexts-mcp] transport error:", err.message),
@@ -806,4 +815,4 @@ function main(): void {
   console.error("[contexts-mcp] MCP server running on stdio");
 }
 
-main();
+void main();
