@@ -1,6 +1,6 @@
 {
   "name": "contexts-mcp",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Local MCP server (with optional web UI) for persistent context folders shared across Claude Code sessions. Stores items as md, txt, json, yaml, yml, csv, or sql.",
   "type": "module",
   "bin": {
@@ -10,24 +10,28 @@
   },
   "scripts": {
     "build": "tsc",
+    "test": "npm run build && node --test \"test/*.test.js\"",
+    "bench:mcp": "node scripts/bench-mcp.js",
+    "scale": "node scripts/scale.js",
     "watch": "tsc --watch",
     "start": "node dist/index.js",
     "ui": "node dist/web.js",
     "setup": "tsc && node dist/setup.js",
     "bench": "node scripts/bench.js",
-    "sanity": "node scripts/sanity.js",
+    "board-check": "node scripts/board-check.js",
     "install:shortcut": "powershell -ExecutionPolicy Bypass -File scripts/install.ps1"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.17.0",
+    "@modelcontextprotocol/server": "^2.0.0",
     "archiver": "^7.0.1",
     "express": "^5.1.0",
     "gray-matter": "^4.0.3",
     "js-yaml": "^4.1.0",
     "marked": "^15.0.0",
-    "zod": "^3.23.0"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "^2.0.0",
     "@types/archiver": "^6.0.3",
     "@types/express": "^5",
     "@types/js-yaml": "^4.0.9",

@@ -37,6 +37,15 @@ export function getDataDir(): string {
 
 export const VERSION_STAMP_FILENAME = ".contexts-mcp-version";
 
+// gray-matter memoizes every distinct input string forever when called without
+// options (matter.cache[content]). For a long-lived server that keeps appending
+// to large items that is an unbounded leak, so every parse here passes an
+// explicit options object, which disables the cache.
+export function parseMarkdown(raw: string): { data: Record<string, unknown>; content: string } {
+  const fm = matter(raw, {});
+  return { data: fm.data as Record<string, unknown>, content: fm.content };
+}
+
 // --- Atomic write ---
 
 // tmp+rename guards against partial writes corrupting _context.yaml or an item
@@ -237,23 +246,38 @@ function normalizeContextMetadata(raw: unknown): ContextMetadata {
   return meta;
 }
 
+// Parsed _context.yaml keyed by file identity (size + mtime). Every listing,
+// search and graph build asks for metadata of every context; with the cache
+// each ask is one stat instead of a read + YAML parse. Entries are treated as
+// immutable — callers get a fresh shallow copy.
+const _metaCache = new Map<string, { size: number; mtimeMs: number; meta: ContextMetadata }>();
+
+function cloneMeta(m: ContextMetadata): ContextMetadata {
+  return { ...m, tags: [...m.tags], links: m.links.map((l) => ({ ...l })) };
+}
+
 export async function getContextMetadata(name: string): Promise<ContextMetadata> {
   const metaPath = resolveContextMetaPath(name);
-  let raw: string;
+  let st: import("fs").Stats;
   try {
-    raw = await fs.readFile(metaPath, "utf-8");
+    st = await fs.stat(metaPath);
   } catch (err: unknown) {
     if (
       err instanceof Error &&
       "code" in err &&
       (err as NodeJS.ErrnoException).code === "ENOENT"
     ) {
+      _metaCache.delete(metaPath);
       return defaultContextMetadata();
     }
     throw err;
   }
-  const parsed = yaml.load(raw);
-  return normalizeContextMetadata(parsed);
+  const hit = _metaCache.get(metaPath);
+  if (hit && hit.size === st.size && hit.mtimeMs === st.mtimeMs) return cloneMeta(hit.meta);
+  const raw = await fs.readFile(metaPath, "utf-8");
+  const meta = normalizeContextMetadata(yaml.load(raw));
+  _metaCache.set(metaPath, { size: st.size, mtimeMs: st.mtimeMs, meta });
+  return cloneMeta(meta);
 }
 
 async function writeContextMetadata(
@@ -365,20 +389,23 @@ export async function listContexts(
   const entries = await fs.readdir(dataDir(), { withFileTypes: true });
   const names = entries.filter((e) => e.isDirectory()).map((e) => e.name);
 
-  const summaries: ContextSummary[] = [];
-  for (const name of names) {
-    if (!needMeta) {
-      summaries.push({ name });
-      continue;
-    }
-    let metadata: ContextMetadata;
-    try {
-      metadata = await getContextMetadata(name);
-    } catch {
-      metadata = defaultContextMetadata();
-    }
-    if (!includeArchived && isArchived(metadata)) continue;
-    summaries.push({ name, metadata });
+  let summaries: ContextSummary[];
+  if (!needMeta) {
+    summaries = names.map((name) => ({ name }));
+  } else {
+    // One _context.yaml read per context, all in flight at once.
+    const loaded = await Promise.all(
+      names.map(async (name) => {
+        let metadata: ContextMetadata;
+        try {
+          metadata = await getContextMetadata(name);
+        } catch {
+          metadata = defaultContextMetadata();
+        }
+        return { name, metadata };
+      })
+    );
+    summaries = loaded.filter((s) => includeArchived || !isArchived(s.metadata));
   }
 
   sortSummaries(summaries, sort);
@@ -595,64 +622,133 @@ export async function corpusSignature(): Promise<string> {
 // invalidates the signature nor shows up anywhere. Both helpers are best-effort:
 // a missing/corrupt cache file just means a rebuild, never an error.
 const GRAPH_CACHE_FILENAME = ".graph-cache.json";
+// Per-document index (links + term vectors) so a rebuild re-parses only the
+// items whose size/mtime changed. Separate from the graph cache so the UI
+// process, which only needs the graph, keeps its cold read small.
+const GRAPH_INDEX_FILENAME = ".graph-index.json";
 
-export async function readGraphCacheFile(): Promise<unknown> {
+async function readCacheFile(filename: string): Promise<unknown> {
   try {
-    const raw = await fs.readFile(path.join(dataDir(), GRAPH_CACHE_FILENAME), "utf-8");
+    const raw = await fs.readFile(path.join(dataDir(), filename), "utf-8");
     return JSON.parse(raw);
   } catch {
     return null;
   }
 }
 
-export async function writeGraphCacheFile(data: unknown): Promise<void> {
+async function writeCacheFile(filename: string, data: unknown): Promise<void> {
   try {
-    await writeFileAtomic(path.join(dataDir(), GRAPH_CACHE_FILENAME), JSON.stringify(data));
+    await writeFileAtomic(path.join(dataDir(), filename), JSON.stringify(data));
   } catch {
     // a failed cache write must never break the read path that triggered it
   }
 }
 
+export const readGraphCacheFile = (): Promise<unknown> => readCacheFile(GRAPH_CACHE_FILENAME);
+export const writeGraphCacheFile = (data: unknown): Promise<void> => writeCacheFile(GRAPH_CACHE_FILENAME, data);
+export const readGraphIndexFile = (): Promise<unknown> => readCacheFile(GRAPH_INDEX_FILENAME);
+export const writeGraphIndexFile = (data: unknown): Promise<void> => writeCacheFile(GRAPH_INDEX_FILENAME, data);
+
+// --- Corpus cache ---
+// Every item's parsed content, keyed by file identity (size + mtime). Search
+// and the graph build both need the whole corpus on every call; with the
+// cache a call costs one readdir per context plus one stat per item, and only
+// files that actually changed are read and parsed again. Deleted files are
+// evicted on the next pass. Memory is roughly the corpus text size.
+
+export interface CorpusDoc {
+  context: string;
+  name: string;
+  extension: ItemExtension;
+  title: string;
+  tags: string[];
+  content: string; // md: body; others: raw text
+  archived: boolean;
+  size: number;
+  mtimeMs: number;
+}
+
+const _docCache = new Map<string, CorpusDoc>(); // key: absolute file path
+
+export function clearCorpusCache(): void {
+  _docCache.clear();
+  _metaCache.clear();
+}
+
+export async function getCorpus(): Promise<CorpusDoc[]> {
+  const contexts = await listContexts({ includeArchived: true, includeMetadata: true });
+  const seen = new Set<string>();
+  const perContext = await Promise.all(
+    contexts.map(async (c): Promise<CorpusDoc[]> => {
+      const archived = c.metadata?.status === "archived";
+      const dir = resolveContextPath(c.name);
+      let entries: string[];
+      try {
+        entries = await fs.readdir(dir);
+      } catch {
+        return [];
+      }
+      const docs = await Promise.all(
+        entries.map(async (entry): Promise<CorpusDoc | null> => {
+          const parsed = splitItemFilename(entry);
+          if (!parsed) return null;
+          const filePath = path.join(dir, entry);
+          let st: import("fs").Stats;
+          try {
+            st = await fs.stat(filePath);
+          } catch {
+            return null;
+          }
+          if (!st.isFile()) return null;
+          seen.add(filePath);
+          const hit = _docCache.get(filePath);
+          if (hit && hit.size === st.size && hit.mtimeMs === st.mtimeMs) {
+            if (hit.archived !== archived) hit.archived = archived;
+            return hit;
+          }
+          let raw: string;
+          try {
+            raw = await fs.readFile(filePath, "utf-8");
+          } catch {
+            return null;
+          }
+          let doc: CorpusDoc;
+          if (parsed.ext === "md") {
+            const fm = parseMarkdown(raw);
+            const title = typeof fm.data.title === "string" && fm.data.title ? fm.data.title : parsed.base;
+            const tags = Array.isArray(fm.data.tags)
+              ? (fm.data.tags as unknown[]).filter((t): t is string => typeof t === "string")
+              : [];
+            doc = { context: c.name, name: parsed.base, extension: parsed.ext, title, tags, content: fm.content, archived, size: st.size, mtimeMs: st.mtimeMs };
+          } else {
+            doc = { context: c.name, name: parsed.base, extension: parsed.ext, title: parsed.base, tags: [], content: raw, archived, size: st.size, mtimeMs: st.mtimeMs };
+          }
+          _docCache.set(filePath, doc);
+          return doc;
+        })
+      );
+      return docs.filter((d): d is CorpusDoc => d !== null);
+    })
+  );
+  for (const key of _docCache.keys()) if (!seen.has(key)) _docCache.delete(key);
+  return perContext.flat();
+}
+
 // Read every item's content across all contexts — the corpus the link/similarity
-// graph is built from. Spans everything (including archived). Skips unreadable
-// entries rather than failing the whole build.
+// graph is built from. Spans everything (including archived). Served from the
+// corpus cache, so unchanged files are not re-read.
 export async function getAllItemsContent(): Promise<
   { context: string; name: string; extension: ItemExtension; title: string; content: string; archived: boolean }[]
 > {
-  const out: {
-    context: string;
-    name: string;
-    extension: ItemExtension;
-    title: string;
-    content: string;
-    archived: boolean;
-  }[] = [];
-  const contexts = await listContexts({ includeArchived: true, includeMetadata: true });
-  for (const c of contexts) {
-    const archived = c.metadata?.status === "archived";
-    let items: ItemInfo[];
-    try {
-      items = await listItems(c.name);
-    } catch {
-      continue;
-    }
-    for (const it of items) {
-      try {
-        const full = await getItem(c.name, it.name, it.extension);
-        out.push({
-          context: c.name,
-          name: it.name,
-          extension: it.extension,
-          title: it.title || it.name,
-          content: full.content,
-          archived,
-        });
-      } catch {
-        /* skip unreadable */
-      }
-    }
-  }
-  return out;
+  const corpus = await getCorpus();
+  return corpus.map((d) => ({
+    context: d.context,
+    name: d.name,
+    extension: d.extension,
+    title: d.title || d.name,
+    content: d.content,
+    archived: d.archived,
+  }));
 }
 
 // --- Item operations ---
@@ -714,30 +810,30 @@ export async function listItems(context: string): Promise<ItemInfo[]> {
     throw new Error(`Context '${context}' not found`);
   }
 
-  const items: ItemInfo[] = [];
-  for (const entry of entries) {
-    const parsed = splitItemFilename(entry);
-    if (!parsed) continue;
+  const loaded = await Promise.all(
+    entries.map(async (entry): Promise<ItemInfo | null> => {
+      const parsed = splitItemFilename(entry);
+      if (!parsed) return null;
 
-    const filePath = path.join(dir, entry);
-    const stat = await fs.stat(filePath);
-    if (!stat.isFile()) continue;
+      const filePath = path.join(dir, entry);
+      const stat = await fs.stat(filePath);
+      if (!stat.isFile()) return null;
 
-    if (parsed.ext === "md") {
-      const raw = await fs.readFile(filePath, "utf-8");
-      const fm = matter(raw);
-      const data = fm.data as Partial<ItemFrontmatter>;
-      items.push({
-        name: parsed.base,
-        extension: parsed.ext,
-        title: data.title || parsed.base,
-        tags: Array.isArray(data.tags) ? data.tags : [],
-        created: data.created || statCreatedISO(stat),
-        updated: data.updated || stat.mtime.toISOString(),
-        size: stat.size,
-      });
-    } else {
-      items.push({
+      if (parsed.ext === "md") {
+        const raw = await fs.readFile(filePath, "utf-8");
+        const fm = parseMarkdown(raw);
+        const data = fm.data as Partial<ItemFrontmatter>;
+        return {
+          name: parsed.base,
+          extension: parsed.ext,
+          title: data.title || parsed.base,
+          tags: Array.isArray(data.tags) ? data.tags : [],
+          created: data.created || statCreatedISO(stat),
+          updated: data.updated || stat.mtime.toISOString(),
+          size: stat.size,
+        };
+      }
+      return {
         name: parsed.base,
         extension: parsed.ext,
         title: parsed.base,
@@ -745,9 +841,10 @@ export async function listItems(context: string): Promise<ItemInfo[]> {
         created: statCreatedISO(stat),
         updated: stat.mtime.toISOString(),
         size: stat.size,
-      });
-    }
-  }
+      };
+    })
+  );
+  const items = loaded.filter((i): i is ItemInfo => i !== null);
 
   items.sort((a, b) => {
     if (a.updated !== b.updated) return a.updated < b.updated ? 1 : -1;
@@ -770,7 +867,7 @@ export async function getItem(
   ]);
 
   if (ext === "md") {
-    const fm = matter(raw);
+    const fm = parseMarkdown(raw);
     const data = fm.data as Partial<ItemFrontmatter>;
     return {
       name: base,
@@ -781,6 +878,7 @@ export async function getItem(
         tags: Array.isArray(data.tags) ? data.tags : [],
         created: data.created || statCreatedISO(stat),
         updated: data.updated || stat.mtime.toISOString(),
+        view: typeof data.view === "string" ? data.view : undefined,
       },
       size: stat.size,
       created: data.created || statCreatedISO(stat),
@@ -899,8 +997,8 @@ export async function updateItem(
 
   if (ext === "md") {
     const raw = await fs.readFile(filePath, "utf-8");
-    const parsed = matter(raw);
-    const meta = parsed.data as Record<string, unknown>;
+    const parsed = parseMarkdown(raw);
+    const meta = parsed.data;
 
     // No-op guard: if title, tags, and body are all unchanged, skip the write.
     // A redundant save (e.g. opening the editor and hitting Save without
@@ -968,8 +1066,8 @@ export async function appendToItem(
 
   if (ext === "md") {
     const raw = await fs.readFile(filePath, "utf-8");
-    const parsed = matter(raw);
-    const meta = parsed.data as Record<string, unknown>;
+    const parsed = parseMarkdown(raw);
+    const meta = parsed.data;
     meta.updated = new Date().toISOString();
     if (!meta.created) meta.created = meta.updated;
 
@@ -986,6 +1084,67 @@ export async function appendToItem(
   await snapshotItem(filePath);
   await writeFileAtomic(filePath, existing + sep + newContent);
   await touchContext(context);
+}
+
+// Surgical edit: replace an exact substring of the item's content. This is
+// the cheap path for changing a large item — the caller sends only the old and
+// new text, not the whole body. For md the match runs against the body only
+// (frontmatter is managed separately and never touched); for other kinds it
+// runs against the raw text. `oldString` must occur exactly once unless
+// replaceAll is set, so an ambiguous edit fails instead of landing somewhere
+// unexpected. Snapshots like updateItem so revert_item still works.
+export async function editItem(
+  context: string,
+  base: string,
+  oldString: string,
+  newString: string,
+  opts: { extension?: ItemExtension; replaceAll?: boolean } = {}
+): Promise<{ name: string; extension: ItemExtension; replacements: number }> {
+  if (oldString.length === 0) throw new Error("old_string must not be empty");
+  if (oldString === newString) throw new Error("old_string and new_string are identical");
+  const ext = await findItemExtension(context, base, opts.extension);
+  const filePath = resolveItemPath(context, base, ext);
+  const raw = await fs.readFile(filePath, "utf-8");
+
+  const applyTo = (body: string): { body: string; replacements: number } => {
+    let count = 0;
+    let idx = body.indexOf(oldString);
+    while (idx !== -1) {
+      count++;
+      idx = body.indexOf(oldString, idx + oldString.length);
+    }
+    if (count === 0) {
+      throw new Error(`old_string not found in '${base}.${ext}'`);
+    }
+    if (count > 1 && !opts.replaceAll) {
+      throw new Error(
+        `old_string occurs ${count} times in '${base}.${ext}'; include more surrounding text to make it unique, or pass replace_all=true`
+      );
+    }
+    const next = opts.replaceAll ? body.split(oldString).join(newString) : body.replace(oldString, () => newString);
+    return { body: next, replacements: count };
+  };
+
+  let output: string;
+  let replacements: number;
+  if (ext === "md") {
+    const parsed = parseMarkdown(raw);
+    const meta = parsed.data;
+    const r = applyTo(parsed.content);
+    replacements = r.replacements;
+    meta.updated = new Date().toISOString();
+    if (!meta.created) meta.created = meta.updated;
+    output = matter.stringify(r.body, meta);
+  } else {
+    const r = applyTo(raw);
+    replacements = r.replacements;
+    output = r.body;
+  }
+
+  await snapshotItem(filePath);
+  await writeFileAtomic(filePath, output);
+  await touchContext(context);
+  return { name: base, extension: ext, replacements };
 }
 
 export async function deleteItem(

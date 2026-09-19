@@ -1002,7 +1002,12 @@ export const styles = `
     .graph-intro { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.5rem; }
     .graph-hint { color: var(--text-dim); }
     .graph-filter { width: 100%; max-width: 22rem; margin-bottom: 0.6rem; }
-    .graph-archived-toggle { display: inline-block; margin-left: 0.75rem; font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; }
+    .graph-rebuild { display: flex; align-items: center; gap: 0.75rem; margin: 0.5rem 0; flex-wrap: wrap; }
+.graph-build-note { color: var(--text-dim); font-size: 0.85em; }
+.graph-rebuild button { font: inherit; font-size: 0.85em; padding: 0.2rem 0.6rem; background: transparent; color: var(--text); border: 1px solid var(--border); cursor: pointer; }
+.graph-rebuild button:hover { border-color: var(--accent); color: var(--accent); }
+.graph-rebuild button[disabled] { opacity: 0.5; cursor: wait; }
+.graph-archived-toggle { display: inline-block; margin-left: 0.75rem; font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; }
     .graph-archived-toggle:hover { color: var(--text-muted); }
     .conn-badge { display: inline-block; margin-top: 0.6rem; font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); border: 1px solid var(--border); border-radius: 3px; padding: 0.1rem 0.45rem; text-decoration: none; }
     .conn-badge:hover { color: var(--text-bright); border-color: var(--accent-line-hover); }
@@ -1013,6 +1018,24 @@ export const styles = `
     .graph-ctx-legend { margin-top: 0.4rem; display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; font-size: 0.62rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
     .graph-ctx-legend .cl-ctx { display: inline-flex; align-items: center; gap: 0.3rem; }
     .graph-ctx-legend .cl-ctx i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+    /* --- Board view (view: board markdown items) --- */
+    /* Board pages widen the WHOLE container (header, breadcrumb, board) rather
+       than bleeding content out of a centred column — bleeding leaves the
+       header floating in a stub of container chrome with dangling borders.
+       The overrides below must outrank the data-width variants above. */
+    .container.container-full,
+    :root[data-width="medium"] .container.container-full,
+    :root[data-width="wide"] .container.container-full { max-width: none; }
+    /* Kiosk (?kiosk=1): the board alone, edge to edge — the recordable surface. */
+    .container-kiosk { padding: 0; border-left: none; border-right: none; box-shadow: none; }
+    .container-kiosk > header, .container-kiosk .classification-footer { display: none; }
+    .container-kiosk #board-wrap { margin-top: 0; border: none; }
+    #board-wrap { position: relative; margin-top: 0.8rem; border: 1px solid var(--border); background: var(--bg); overflow: hidden; }
+    #board-canvas { display: block; width: 100%; cursor: grab; touch-action: none; }
+    #board-canvas:active { cursor: grabbing; }
+    #board-empty { padding: 3rem; text-align: center; }
+
     .doc-toc-title { text-transform: uppercase; letter-spacing: 0.15em; font-size: 0.62rem; color: var(--text-dim); margin: 0 0 0.7rem 0; }
     .doc-toc ul { list-style: none; margin: 0; padding: 0; }
     .doc-toc li { border-bottom: 1px solid var(--border); }

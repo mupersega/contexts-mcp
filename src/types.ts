@@ -65,6 +65,10 @@ export interface ItemFrontmatter {
   tags: string[];
   created: string;
   updated: string;
+  // Opt-in alternate rendering for the web UI ("board" is the only value the UI
+  // knows). Unknown values fall back to the normal document view; updateItem
+  // round-trips the parsed frontmatter object, so the key survives edits.
+  view?: string;
 }
 
 // Listing entry; one shape for all kinds.
@@ -144,6 +148,14 @@ export const ListContextsArgsSchema = z.object({
     .optional()
     .default(false)
     .describe("Include contexts with status='archived'. Default false."),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(1000)
+    .optional()
+    .default(100)
+    .describe("Max contexts returned (after sort). Default 100."),
 });
 
 export const CreateContextArgsSchema = z.object({
@@ -190,6 +202,27 @@ export const GetItemArgsSchema = z.object({
     .optional()
     .default(false)
     .describe("If true, return byte-for-byte file contents (incl. frontmatter for md) as JSON."),
+  offset: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe("1-based line to start from. Use with limit to page through a large item."),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe("Max lines to return. Without it, items over ~60 KB are cut at a line boundary with a note on how to continue."),
+});
+
+export const EditItemArgsSchema = z.object({
+  context: z.string(),
+  item: z.string().describe("Item base name (without extension)."),
+  extension: ItemExtensionSchema.optional(),
+  old_string: z.string().min(1).describe("Exact text to find. Must occur exactly once unless replace_all=true."),
+  new_string: z.string().describe("Replacement text (may be empty to delete)."),
+  replace_all: z.boolean().optional().default(false).describe("Replace every occurrence instead of requiring uniqueness."),
 });
 
 export const CreateItemArgsSchema = z.object({
@@ -246,11 +279,27 @@ export const SearchContextsArgsSchema = z.object({
     .optional()
     .default(false)
     .describe("Include archived contexts. Default false."),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(200)
+    .optional()
+    .default(20)
+    .describe("Max items returned, best matches first. Default 20."),
+  lines_per_item: z
+    .number()
+    .int()
+    .min(0)
+    .max(50)
+    .optional()
+    .default(5)
+    .describe("Matching lines shown per item (each trimmed to ~200 chars). 0 for titles only. Default 5."),
 });
 
 export const ContextDiagnoseArgsSchema = z.object({});
 
-const GUIDE_NAMES = ["migration", "mermaid"] as const;
+const GUIDE_NAMES = ["migration", "mermaid", "board"] as const;
 export const GetGuideArgsSchema = z.object({
   name: z.enum(GUIDE_NAMES),
 });
@@ -281,3 +330,11 @@ export const GetItemLinksArgsSchema = z.object({
 });
 
 export const GetGraphArgsSchema = z.object({});
+
+export const RebuildGraphArgsSchema = z.object({
+  mode: z
+    .enum(["auto", "full"])
+    .optional()
+    .default("full")
+    .describe("'full' drops every cache and runs the exact all-pairs similarity (slow on large corpora, best links). 'auto' runs the incremental pruned pass synchronously."),
+});

@@ -102,8 +102,10 @@ function displayContextTitle(summary: ContextSummary): string {
   return metaTitle && metaTitle.trim().length > 0 ? metaTitle : summary.name;
 }
 
-export function layout(title: string, body: string): string {
+export function layout(title: string, body: string, opts: { fullWidth?: boolean; kiosk?: boolean } = {}): string {
   const terminalId = Math.floor(Math.random() * 900) + 100;
+  const containerClass =
+    (opts.fullWidth ? "container container-full" : "container") + (opts.kiosk ? " container-kiosk" : "");
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -150,7 +152,7 @@ export function layout(title: string, body: string): string {
 </head>
 <body>
   <canvas id="noise-canvas"></canvas>
-  <div class="container">
+  <div class="${containerClass}">
     <header>
       <div class="sys-bars" id="sys-bars"><span aria-hidden="true">SYS.ACTIVE </span><span id="sys-bars-strip" aria-hidden="true">░░░░░░░░░░░░░░░░░░░░</span><a href="/theme" id="theme-lab-link" title="Theme lab" aria-label="Open theme lab"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M7.5 1.5 C3.8 1.5 1 3.9 1 7 C1 9.7 3 11.3 4.8 11.3 C5.5 11.3 5.9 10.9 6.2 10.4 C6.6 9.7 7.2 9.4 7.8 9.4 C8.6 9.4 9 9.8 9.2 10.4 C9.4 11 9.8 11.5 10.5 11.5 C12.8 11.5 15 9.5 15 6.7 C15 3.8 12 1.5 7.5 1.5 Z" fill="currentColor"/><circle cx="4.5" cy="5.5" r="1" fill="var(--bg)"/><circle cx="7.5" cy="3.8" r="1" fill="var(--bg)"/><circle cx="10.5" cy="5" r="1" fill="var(--bg)"/><circle cx="12" cy="7.5" r="1" fill="var(--bg)"/></svg></a><button type="button" id="width-toggle" popovertarget="width-popout" title="Width">W</button><div id="width-popout" popover><button type="button" data-width-set="narrow">narrow</button><button type="button" data-width-set="medium">medium</button><button type="button" data-width-set="wide">wide</button></div><button type="button" id="theme-toggle" aria-label="Toggle theme">◐</button></div>
       <h1><a href="/">Contexts</a></h1>
@@ -773,6 +775,7 @@ export function itemListPage(
 // Kept minimal to suit the terminal aesthetic; sit as a row in the sticky topbar.
 const ICONS: Record<string, string> = {
   copy: `<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.2" y="5.2" width="8.3" height="8.3" rx="1.4"/><path d="M3.2 10.8 H2.9 A1.4 1.4 0 0 1 1.5 9.4 V2.9 A1.4 1.4 0 0 1 2.9 1.5 H9.4 A1.4 1.4 0 0 1 10.8 2.9 V3.2"/></svg>`,
+  board: `<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.8" y="2.5" width="6.2" height="4.8" rx="0.8"/><rect x="8.8" y="9" width="5.4" height="4.3" rx="0.8"/><path d="M7.6 5.6 L10.6 9"/><circle cx="12.1" cy="4.3" r="1.4"/></svg>`,
   download: `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2 V9.6"/><path d="M4.8 6.6 L8 9.9 L11.2 6.6"/><path d="M2.6 13 H13.4"/></svg>`,
   code: `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.6 4.4 L2 8 L5.6 11.6"/><path d="M10.4 4.4 L14 8 L10.4 11.6"/></svg>`,
   doc: `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.3 H9 L12 5.3 V13.7 H4 Z"/><path d="M9 2.3 V5.3 H12"/><path d="M5.9 8.4 H10.1 M5.9 10.6 H10.1"/></svg>`,
@@ -797,6 +800,7 @@ export function itemViewPage(
   hasBackup: boolean = false,
   toc: TocEntry[] = [],
   connections: ItemConnections | null = null,
+  isBoard: boolean = false,
 ): string {
   const appendSupported =
     !rawMode && (isMarkdown || extension === "txt" || extension === "csv" || extension === "sql");
@@ -879,6 +883,7 @@ export function itemViewPage(
         <a href="/">Contexts</a> / <a href="/ctx/${esc(context)}">${esc(context)}</a> / <strong>${esc(name)}.${esc(extension)}</strong>${rawMode ? ' <span style="color:var(--text-dim);">(raw)</span>' : ""}
       </div>
       <div class="doc-actions">
+        ${isBoard ? `<a class="icon-btn" href="${viewUrl}" title="Board view" aria-label="Board view">${icon("board")}</a>` : ""}
         <button type="button" class="icon-btn" data-copy-raw="${rawUrl}" data-ext="${esc(extension)}" title="${isMarkdown ? "Copy body (Alt = include frontmatter)" : "Copy raw content"}" aria-label="Copy">${icon("copy")}</button>
         <a class="icon-btn" href="${rawUrl}&amp;download=1" title="Download" aria-label="Download">${icon("download")}</a>
         <a class="icon-btn${rawMode ? " is-active" : ""}" href="${rawToggleHref}" title="${rawToggleLabel}" aria-label="${rawToggleLabel}">${icon(rawMode ? "doc" : "code")}</a>
@@ -933,9 +938,17 @@ const GRAPH_SCRIPT = `
   }
   var cs = getComputedStyle(document.documentElement);
   function v(name, fb){ var x = cs.getPropertyValue(name).trim(); return x || fb; }
-  var ACCENT = v('--accent','#4ade80'), MUTED = v('--text-muted','#7d8491'),
-      DIM = v('--text-dim','#5a6070'), BRIGHT = v('--text-bright','#e6e8ec'),
-      TEXT = v('--text','#c9d1d9'), BG = v('--bg','#0c0e12');
+  // Same live-theme rule as the board view: re-resolve tokens on root
+  // attribute changes so a dark/light toggle never leaves stale canvas ink.
+  var ACCENT, MUTED, DIM, BRIGHT, TEXT, BG;
+  function refreshColors(){
+    ACCENT = v('--accent','#4ade80'); MUTED = v('--text-muted','#7d8491');
+    DIM = v('--text-dim','#5a6070'); BRIGHT = v('--text-bright','#e6e8ec');
+    TEXT = v('--text','#c9d1d9'); BG = v('--bg','#0c0e12');
+  }
+  refreshColors();
+  if (window.MutationObserver)
+    new MutationObserver(refreshColors).observe(document.documentElement, { attributes: true });
   var nodes = [], edges = [], byId = {}, colorOf = {},
       hover = null, drag = null, moved = false, filter = '',
       panning = false, panSX = 0, panSY = 0, panCX = 0, panCY = 0;
@@ -1229,7 +1242,15 @@ const GRAPH_SCRIPT = `
 })();
 `;
 
-export function graphPage(includeArchived = false, scopeCtx = ""): string {
+export function graphPage(
+  includeArchived = false,
+  scopeCtx = "",
+  rebuiltNote = "",
+  lastBuild: { mode: string; pass: string; similarity: string; ms: number; nodes: number; edges: number; reindexed: number; rescored: number } | null = null
+): string {
+  const buildLine = lastBuild
+    ? `Last build: ${esc(lastBuild.mode)} (${esc(lastBuild.pass)}, ${esc(lastBuild.similarity)}), ${(lastBuild.ms / 1000).toFixed(1)}s, ${lastBuild.nodes} nodes, ${lastBuild.edges} edges, ${lastBuild.reindexed} re-indexed, ${lastBuild.rescored} re-scored.`
+    : "No build in this process yet (graph served from the disk cache).";
   const qstr = (arch: boolean): string => {
     const parts: string[] = [];
     if (scopeCtx) parts.push(`ctx=${encodeURIComponent(scopeCtx)}`);
@@ -1244,6 +1265,10 @@ export function graphPage(includeArchived = false, scopeCtx = ""): string {
     <p class="graph-intro">${scopeCtx ? `Items in <strong>${esc(scopeCtx)}</strong> and their direct connections. ` : "Every item is a node. "}Solid edges are explicit links; dashed edges are semantically related items. <span class="graph-hint">Scroll to zoom, drag empty space to pan, drag a node to move it, click to open. Hover a node to focus its neighbourhood.</span>${scopeCtx ? ` <a href="/graph${includeArchived ? "?archived=1" : ""}">View full graph</a>.` : ""}</p>
     <input type="text" id="graph-filter" class="graph-filter" placeholder="Filter nodes by title or context…" autocomplete="off">
     <a class="graph-archived-toggle" href="/graph${qstr(!includeArchived)}">${includeArchived ? "Hide archived" : "Show archived"}</a>
+    <form class="graph-rebuild" method="post" action="/graph/rebuild" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='Rebuilding…';">
+      <span class="graph-build-note">${rebuiltNote ? `Rebuilt: ${esc(rebuiltNote)}. ` : ""}${buildLine}</span>
+      <button type="submit" name="mode" value="full" title="Drop every cache, re-read everything and run the exact all-pairs similarity. Slow on a large corpus; best link quality.">Full rebuild</button>
+    </form>
     <div id="graph-wrap">
       <canvas id="graph-canvas"></canvas>
       <div class="graph-controls" aria-hidden="true">
@@ -1256,6 +1281,895 @@ export function graphPage(includeArchived = false, scopeCtx = ""): string {
     <div class="graph-legend"><span class="lg-link">&mdash; linked</span><span class="lg-rel">&middot;&middot;&middot; related</span></div>
     <div id="graph-ctx-legend" class="graph-ctx-legend"></div>
     <script>${GRAPH_SCRIPT}</script>`
+  );
+}
+
+// Board-view client script (view: board markdown items). Renders the item's
+// \`\`\`board fence — figures with region pins, notes, item chips, edges — onto a
+// pan/zoom canvas. Layout is deterministic: per-figure callout labels are placed
+// by a legend-layout pass (no physics), and only the resulting cluster
+// rectangles are packed by a small force relax, seeded from a hash of the fence
+// text so the same file always settles the same way. The relax runs fully
+// off-screen before the first paint (same move as GRAPH_SCRIPT), then freezes —
+// no dragging, no reheat; the camera is the only thing that moves. No backticks
+// or \${} inside, and no literal backslash — this string is interpolated into a
+// template literal.
+const BOARD_SCRIPT = `
+(function(){
+  var canvas = document.getElementById('board-canvas');
+  if (!canvas || !canvas.getContext) return;
+  var ctx = canvas.getContext('2d');
+  var wrap = document.getElementById('board-wrap');
+  var empty = document.getElementById('board-empty');
+  var dataEl = document.getElementById('board-data');
+  var CURCTX = wrap.getAttribute('data-context') || '';
+  function fail(msg){ canvas.style.display='none'; if (empty){ empty.textContent = msg; empty.style.display='block'; } }
+  var spec = null;
+  try { spec = JSON.parse(dataEl.textContent); } catch (e) { fail('Could not parse the board fence.'); return; }
+  var specNodes = (spec && Array.isArray(spec.nodes)) ? spec.nodes : [];
+  if (!specNodes.length){ fail('The board declares no nodes.'); return; }
+
+  var DPR = Math.min(window.devicePixelRatio || 1, 2);
+  var W = 800, H = 480;
+  function resize(){
+    var top = wrap.getBoundingClientRect().top;
+    W = wrap.clientWidth || 800;
+    H = Math.max(440, Math.round(window.innerHeight - top - 20));
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  var cs = getComputedStyle(document.documentElement);
+  function v(name, fb){ var x = cs.getPropertyValue(name).trim(); return x || fb; }
+  // Ink comes from the live theme tokens, re-resolved whenever the root's
+  // attributes change (dark/light toggle, theme-lab knobs) — a one-time
+  // snapshot leaves the canvas painting a stale palette after a toggle. The
+  // rAF loop repaints every frame, so new colors land on the next frame.
+  var ACCENT, MUTED, DIM, TEXT, BG, BORDER;
+  function refreshColors(){
+    ACCENT = v('--accent','#4ade80'); MUTED = v('--text-muted','#7d8491');
+    DIM = v('--text-dim','#5a6070'); TEXT = v('--text','#c9d1d9');
+    BG = v('--bg','#0c0e12'); BORDER = v('--border','#2a2f3a');
+  }
+  refreshColors();
+  if (window.MutationObserver)
+    new MutationObserver(refreshColors).observe(document.documentElement, { attributes: true });
+
+  // Deterministic settle: FNV-1a of the fence text seeds a mulberry32 PRNG, so
+  // the same file always lays out the same way and screenshots are reproducible.
+  // No positions are ever stored — the fence stays declarative and an agent can
+  // regenerate the whole board without destroying anyone's arrangement.
+  var seed = 2166136261 >>> 0;
+  (function(){ var s = dataEl.textContent; for (var i=0;i<s.length;i++){ seed ^= s.charCodeAt(i); seed = Math.imul(seed, 16777619) >>> 0; } })();
+  function rnd(){ seed = (seed + 0x6D2B79F5) >>> 0; var t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }
+
+  var cam = { x: 0, y: 0, scale: 1 };
+  function clamp(x, lo, hi){ return x < lo ? lo : (x > hi ? hi : x); }
+  function toWorldX(px){ return (px - W/2) / cam.scale + cam.x; }
+  function toWorldY(py){ return (py - H/2) / cam.scale + cam.y; }
+
+  // Drawn-annotation strokes. Every bow and wobble is decided ONCE at build time
+  // from the seeded PRNG and stored on the object, never rolled per frame — the
+  // hand-drawn look is exactly as deterministic as the layout.
+  function qc(x1, y1, x2, y2, bow){
+    var dx = x2 - x1, dy = y2 - y1, len = Math.sqrt(dx*dx + dy*dy) || 1;
+    return { x: (x1+x2)/2 - dy/len * bow, y: (y1+y2)/2 + dx/len * bow };
+  }
+  // t (0..1, default 1) draws only the first part of the stroke — a De
+  // Casteljau cut of the quadratic — so presentation mode shows the pen
+  // mid-stroke instead of fading finished ink in.
+  function sketchSeg(x1, y1, x2, y2, bow, t){
+    var c = qc(x1, y1, x2, y2, bow);
+    if (t != null && t <= 0) return c;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    if (t == null || t >= 1){ ctx.quadraticCurveTo(c.x, c.y, x2, y2); }
+    else {
+      var ax = x1 + (c.x - x1) * t, ay = y1 + (c.y - y1) * t;
+      var bx = c.x + (x2 - c.x) * t, by = c.y + (y2 - c.y) * t;
+      ctx.quadraticCurveTo(ax, ay, ax + (bx - ax) * t, ay + (by - ay) * t);
+    }
+    ctx.stroke();
+    return c;
+  }
+  function sketchRect(x, y, w, h, j, t){
+    // four separate strokes with tiny alternating bows — a frame ruled by hand,
+    // one side after another when a partial t is animating in
+    var tt = (t == null) ? 1 : t;
+    sketchSeg(x, y, x + w, y, (j[0] - 0.5) * 3.5, clamp(tt*4, 0, 1));
+    sketchSeg(x + w, y, x + w, y + h, (j[1] - 0.5) * 3.5, clamp(tt*4 - 1, 0, 1));
+    sketchSeg(x + w, y + h, x, y + h, (j[2] - 0.5) * 3.5, clamp(tt*4 - 2, 0, 1));
+    sketchSeg(x, y + h, x, y, (j[3] - 0.5) * 3.5, clamp(tt*4 - 3, 0, 1));
+  }
+  function sketchCircle(x, y, r, j, t){
+    // two overlapping arcs, neither quite closed — a pen circling twice
+    var tt = (t == null) ? 1 : t;
+    var w1 = 5.5 * clamp(tt / 0.6, 0, 1), w2 = 4.4 * clamp((tt - 0.4) / 0.6, 0, 1);
+    if (w1 > 0){
+      ctx.beginPath();
+      ctx.ellipse(x, y, r * (1 + (j[0]-0.5)*0.14), r * (1 + (j[1]-0.5)*0.14), j[2]*Math.PI, j[3]*6.3, j[3]*6.3 + w1);
+      ctx.stroke();
+    }
+    if (w2 > 0){
+      ctx.beginPath();
+      ctx.ellipse(x, y, r * (1 + (j[1]-0.5)*0.18), r * (1 + (j[0]-0.5)*0.12), j[3]*Math.PI, j[2]*6.3, j[2]*6.3 + w2);
+      ctx.stroke();
+    }
+  }
+
+  // --- Presentation mode ---
+  // The order IS the file: bodies in nodes[] order, then each figure's pins in
+  // declaration order, take 1-based step numbers (assigned in start()). cur >
+  // stepsTotal means the whole board — the default view. An edge appears once
+  // everything it touches has. No schema, no stored sequence: an agent writing
+  // the fence in argument order has already written the presentation.
+  var stepsTotal = 0, cur = 0, nowMs = 0, ANIM = 650;
+  var camT = { x: 0, y: 0, scale: 1, on: false };
+  // Auto-advance (?play=<ms> or the auto link); any real input hands control
+  // back to the human. Completion raises the __boardPlayDone signal.
+  var playTimer = 0;
+  function stopPlay(){ if (playTimer){ clearInterval(playTimer); playTimer = 0; } }
+  function startPlay(dwell){
+    stopPlay();
+    playTimer = setInterval(function(){
+      if (cur <= stepsTotal) gotoStep(cur + 1);
+      else {
+        stopPlay();
+        setTimeout(function(){
+          window.__boardPlayDone = true;
+          window.dispatchEvent(new Event('board-play-done'));
+        }, 900);
+      }
+    }, dwell);
+  }
+  function easeOut(t){ return t * (2 - t); }
+  // Reveal alpha for a step-bearing element: 0 before its step, a draw-on ramp
+  // for ~ANIM ms after it reveals, then steady 1 (revT clears itself).
+  function aOf(el){
+    if (el.stepIdx > cur) return 0;
+    if (!el.revT) return 1;
+    var t = (nowMs - el.revT) / ANIM;
+    if (t >= 1){ el.revT = 0; return 1; }
+    return easeOut(t < 0 ? 0 : t);
+  }
+  // A callout is ONE gesture: words, spot-circle, and leader animate together
+  // over the same ramp (sequential beats made each callout read as two events).
+  // The leader still draws from the label toward the pin, so even inside the
+  // single motion the eye travels in reading order.
+
+  // World-unit knobs. FIG_MAX caps a figure's longest side; LEGEND_AT is where a
+  // dense figure collapses from side labels to a numbered legend beneath it.
+  var FIG_MAX = 340, LABEL_W = 170, LABEL_GAP = 18, PAD = 10, LEGEND_AT = 6, MARGIN = 46;
+  var FONT_LABEL = '11px "IBM Plex Mono", monospace';
+  var FONT_CAP = '12px "IBM Plex Mono", monospace';
+  var FONT_NOTE = '12.5px "IBM Plex Mono", monospace';
+  var FONT_CHIP = '12px "IBM Plex Mono", monospace';
+  var LABEL_LH = 14, NOTE_LH = 17, CAP_LH = 15;
+
+  var bodies = [], byId = {}, edges = [];
+  specNodes.forEach(function(n, i){
+    if (!n || typeof n !== 'object') return;
+    var type = (n.type === 'figure' || n.type === 'item') ? n.type : 'note';
+    var b = { id: String(n.id != null ? n.id : 'n' + i), type: type, n: n,
+      x: 0, y: 0, vx: 0, vy: 0,
+      hw: 60, hh: 20, cx: 0, cy: 0,
+      img: null, fw: 0, fh: 0, capLines: [], legend: false, legendLines: null,
+      pins: [], labels: [], noteLines: null, chipLabel: '',
+      jit: [rnd(), rnd(), rnd(), rnd()], rot: (rnd() - 0.5) * 0.05 };
+    if (byId[b.id]) return; // duplicate id — first declaration wins
+    byId[b.id] = b; bodies.push(b);
+  });
+  if (!bodies.length){ fail('The board declares no usable nodes.'); return; }
+
+  (Array.isArray(spec.edges) ? spec.edges : []).forEach(function(e){
+    if (!e || e.from == null || e.to == null) return;
+    function end(ref){
+      var s = String(ref), hash = s.indexOf('#');
+      var b = byId[hash >= 0 ? s.slice(0, hash) : s];
+      return b ? { b: b, pin: hash >= 0 ? s.slice(hash + 1) : '' } : null;
+    }
+    var a = end(e.from), z = end(e.to);
+    if (a && z && a.b !== z.b) edges.push({ a: a, z: z, label: e.label ? String(e.label) : '',
+      bowk: (rnd() - 0.5), j: rnd() });
+  });
+
+  function wrapText(text, maxw, font){
+    ctx.font = font;
+    var words = String(text).split(' ').filter(function(w){ return w.length; });
+    var lines = [], cur = '';
+    for (var i=0;i<words.length;i++){
+      var t = cur ? cur + ' ' + words[i] : words[i];
+      if (cur && ctx.measureText(t).width > maxw){ lines.push(cur); cur = words[i]; }
+      else cur = t;
+    }
+    if (cur) lines.push(cur);
+    return lines;
+  }
+
+  // [[wiki-link]] resolution mirrors the server's: bare names live in the
+  // board's own context, ctx/item crosses contexts, |alias renames the chip.
+  function parseLink(link){
+    var s = String(link || '');
+    if (s.slice(0,2) === '[[' && s.slice(-2) === ']]') s = s.slice(2, -2);
+    var pipe = s.indexOf('|'), alias = '';
+    if (pipe >= 0){ alias = s.slice(pipe + 1); s = s.slice(0, pipe); }
+    var slash = s.indexOf('/');
+    return { ctx: slash >= 0 ? s.slice(0, slash) : CURCTX,
+             item: slash >= 0 ? s.slice(slash + 1) : s, alias: alias };
+  }
+
+  function figX(b){ return b.x - b.cx; } // figure centre (body centres the cluster box)
+  function figY(b){ return b.y - b.cy; }
+  function pinWorld(b, pin){
+    return { x: figX(b) - b.fw/2 + pin.nx * b.fw, y: figY(b) - b.fh/2 + pin.ny * b.fh };
+  }
+  function pinRectWorld(b, pin){
+    var fx = figX(b) - b.fw/2, fy = figY(b) - b.fh/2;
+    return { x: fx + pin.rx * b.fw, y: fy + pin.ry * b.fh, w: pin.rw * b.fw, h: pin.rh * b.fh };
+  }
+  // Where a leader or edge lands on a pin: a point pin is its point; a region
+  // pin is the border of its rectangle toward the approaching line, so ink
+  // never crosses into the highlighted region itself.
+  function pinAnchor(b, pin, fromX, fromY){
+    var c = pinWorld(b, pin);
+    if (!pin.region) return c;
+    var r = pinRectWorld(b, pin);
+    var hw = Math.max(0.01, r.w/2), hh = Math.max(0.01, r.h/2);
+    var dx = fromX - c.x, dy = fromY - c.y;
+    var tx = dx !== 0 ? hw / Math.abs(dx) : 1e9, ty = dy !== 0 ? hh / Math.abs(dy) : 1e9;
+    var t = Math.min(tx, ty, 1);
+    return { x: c.x + dx * t, y: c.y + dy * t };
+  }
+
+  // Deterministic per-figure callout layout — the legend-layout problem, not
+  // physics: each pin's label sits on the side its anchor is nearest, stacked in
+  // pin order with overlaps pushed down. The resulting cluster box (figure +
+  // labels + caption/legend) is the rectangle the coarse sim packs.
+  function layoutFigure(b){
+    b.labels = [];
+    var belowH = b.capLines.length * CAP_LH + (b.capLines.length ? 8 : 0);
+    if (b.legend){
+      b.legendLines = [];
+      for (var i=0;i<b.pins.length;i++){
+        var ls = wrapText(b.pins[i].num + '. ' + b.pins[i].text, b.fw - 12, FONT_LABEL);
+        // each line remembers its pin so presentation mode reveals legend
+        // entries pin by pin, same as side labels
+        for (var k=0;k<ls.length;k++) b.legendLines.push({ t: ls[k], first: k === 0, pin: b.pins[i] });
+      }
+      belowH += b.legendLines.length * LABEL_LH + (b.legendLines.length ? 10 : 0);
+    } else {
+      var sides = { l: [], r: [] };
+      for (var p=0;p<b.pins.length;p++){ var pn = b.pins[p]; (pn.nx < 0.5 ? sides.l : sides.r).push(pn); }
+      ['l','r'].forEach(function(sd){
+        var list = sides[sd];
+        list.sort(function(a,c){ return a.ny - c.ny; });
+        var cursor = -1e9;
+        for (var q=0;q<list.length;q++){
+          var pin = list[q];
+          var lines = wrapText(pin.text, LABEL_W, FONT_LABEL);
+          var tw = 0;
+          for (var w2=0; w2<lines.length; w2++) tw = Math.max(tw, ctx.measureText(lines[w2]).width);
+          var h = lines.length * LABEL_LH;
+          var top = Math.max(pin.ny * b.fh - b.fh/2 - h/2, cursor + 10);
+          cursor = top + h;
+          b.labels.push({ pin: pin, side: sd, lines: lines, h: h, tw: tw,
+            dx: sd === 'l' ? (-b.fw/2 - LABEL_GAP - LABEL_W) : (b.fw/2 + LABEL_GAP),
+            dy: top, bowk: (rnd() - 0.5), rot: (rnd() - 0.5) * 0.045 });
+        }
+      });
+    }
+    var l = -b.fw/2, r = b.fw/2, t = -b.fh/2, btm = b.fh/2 + belowH;
+    for (var m=0;m<b.labels.length;m++){
+      var lb = b.labels[m];
+      l = Math.min(l, lb.dx); r = Math.max(r, lb.dx + LABEL_W);
+      t = Math.min(t, lb.dy); btm = Math.max(btm, lb.dy + lb.h);
+    }
+    b.cx = (l + r) / 2; b.cy = (t + btm) / 2;
+    b.hw = (r - l) / 2 + 6; b.hh = (btm - t) / 2 + 6;
+  }
+
+  function measureBody(b){
+    if (b.type === 'figure'){
+      var nw = b.img ? b.img.naturalWidth : 4, nh = b.img ? b.img.naturalHeight : 3;
+      var k = FIG_MAX / Math.max(nw, nh, 1);
+      b.fw = Math.max(80, Math.round(nw * k)); b.fh = Math.max(60, Math.round(nh * k));
+      b.capLines = b.n.caption ? wrapText(b.n.caption, Math.max(120, b.fw - 8), FONT_CAP) : [];
+      var pins = Array.isArray(b.n.pins) ? b.n.pins : [];
+      b.pins = [];
+      for (var i=0;i<pins.length;i++){
+        var p = pins[i];
+        if (!p) continue;
+        // region pin: rect [x, y, w, h] (normalized) marks the precise part of
+        // the image — a button, a heading — instead of a single point. Also
+        // accepted as a 4-element "at". nx/ny stay the centre so label sides,
+        // stacking, and edge anchoring work identically for both kinds.
+        var r4 = (Array.isArray(p.rect) && p.rect.length >= 4) ? p.rect
+               : (Array.isArray(p.at) && p.at.length >= 4) ? p.at : null;
+        if (r4){
+          var rx = clamp(+r4[0] || 0, 0, 1), ry = clamp(+r4[1] || 0, 0, 1);
+          var rw = clamp(+r4[2] || 0, 0, 1 - rx), rh = clamp(+r4[3] || 0, 0, 1 - ry);
+          b.pins.push({ id: p.id != null ? String(p.id) : String(b.pins.length + 1),
+            region: true, rx: rx, ry: ry, rw: rw, rh: rh,
+            nx: rx + rw/2, ny: ry + rh/2,
+            text: String(p.text || ''), num: b.pins.length + 1,
+            j: [rnd(), rnd(), rnd(), rnd()] });
+          continue;
+        }
+        if (!Array.isArray(p.at) || p.at.length < 2) continue;
+        b.pins.push({ id: p.id != null ? String(p.id) : String(b.pins.length + 1),
+          region: false, rw: 0, rh: 0,
+          nx: clamp(+p.at[0] || 0, 0, 1), ny: clamp(+p.at[1] || 0, 0, 1),
+          text: String(p.text || ''), num: b.pins.length + 1,
+          j: [rnd(), rnd(), rnd(), rnd()] });
+      }
+      b.legend = b.pins.length >= LEGEND_AT;
+      layoutFigure(b);
+    } else if (b.type === 'note'){
+      var lines = wrapText(b.n.text || '', 210, FONT_NOTE);
+      b.noteLines = lines;
+      var wmax = 40;
+      ctx.font = FONT_NOTE;
+      for (var j=0;j<lines.length;j++) wmax = Math.max(wmax, ctx.measureText(lines[j]).width);
+      b.hw = (wmax + PAD*2) / 2; b.hh = (lines.length * NOTE_LH + PAD*2) / 2;
+    } else {
+      var t2 = parseLink(b.n.link);
+      b.chipLabel = b.n.label ? String(b.n.label) : (t2.alias || t2.item || '?');
+      ctx.font = FONT_CHIP;
+      b.hw = (ctx.measureText(b.chipLabel).width + 30) / 2; b.hh = 14;
+    }
+  }
+
+  // One relaxation tick over cluster rectangles: overlap separation along the
+  // axis of least penetration, mild long-range repulsion so islands spread,
+  // springs on declared edges, gentle gravity. Returns max speed so the relax
+  // loop can stop when calm.
+  function step(){
+    for (var i=0;i<bodies.length;i++){
+      var a = bodies[i];
+      for (var j=i+1;j<bodies.length;j++){
+        var b = bodies[j];
+        var dx = b.x - a.x, dy = b.y - a.y;
+        var px = a.hw + b.hw + MARGIN - Math.abs(dx);
+        var py = a.hh + b.hh + MARGIN - Math.abs(dy);
+        if (px > 0 && py > 0){
+          if (px < py){ var f = px * 0.045 * (dx < 0 ? -1 : 1); a.vx -= f; b.vx += f; }
+          else { var g = py * 0.045 * (dy < 0 ? -1 : 1); a.vy -= g; b.vy += g; }
+        }
+        var d2 = dx*dx + dy*dy + 0.01, d = Math.sqrt(d2), rf = 22000 / d2;
+        a.vx -= dx/d*rf; a.vy -= dy/d*rf; b.vx += dx/d*rf; b.vy += dy/d*rf;
+      }
+    }
+    for (var e=0;e<edges.length;e++){
+      var ed = edges[e], A = ed.a.b, Z = ed.z.b;
+      var ex = Z.x - A.x, ey = Z.y - A.y, el = Math.sqrt(ex*ex + ey*ey) || 0.01;
+      var rest = Math.max(A.hw, A.hh) + Math.max(Z.hw, Z.hh) + 80;
+      var sf = (el - rest) * 0.015, sfx = ex/el*sf, sfy = ey/el*sf;
+      A.vx += sfx; A.vy += sfy; Z.vx -= sfx; Z.vy -= sfy;
+    }
+    var maxv = 0;
+    for (var n=0;n<bodies.length;n++){
+      var p = bodies[n];
+      p.vx += (0 - p.x) * 0.0016; p.vy += (0 - p.y) * 0.0016;
+      p.vx *= 0.84; p.vy *= 0.84;
+      p.vx = clamp(p.vx, -50, 50); p.vy = clamp(p.vy, -50, 50);
+      p.x += p.vx; p.y += p.vy;
+      var spd = Math.abs(p.vx) + Math.abs(p.vy);
+      if (spd > maxv) maxv = spd;
+    }
+    return maxv;
+  }
+
+  function fitView(pad){
+    var minx=1e9, miny=1e9, maxx=-1e9, maxy=-1e9;
+    for (var i=0;i<bodies.length;i++){ var b = bodies[i];
+      minx = Math.min(minx, b.x - b.hw); maxx = Math.max(maxx, b.x + b.hw);
+      miny = Math.min(miny, b.y - b.hh); maxy = Math.max(maxy, b.y + b.hh); }
+    var gw = Math.max(1, maxx - minx), gh = Math.max(1, maxy - miny);
+    cam.scale = clamp(Math.min((W - pad*2)/gw, (H - pad*2)/gh), 0.08, 2.5);
+    cam.x = (minx + maxx)/2; cam.y = (miny + maxy)/2;
+    camT.on = false;
+  }
+
+  // Presentation navigation. "Look over here" is the camera: each advance
+  // eases onto the newly revealed thing's cluster; the overview is the final
+  // step, arrived at rather than opened onto.
+  // Per-body zoom ceiling: fill the viewport unless something real stops us.
+  // A figure is bounded by its image's native pixels (zooming past them is
+  // mush); a text-only note or chip by how large the type should sensibly get.
+  // A flat cap here left the action postage-stamp small on big monitors.
+  function maxZoom(b){
+    if (b.type === 'figure' && b.img && b.fw > 0){
+      return Math.max(1.4, (b.img.naturalWidth / b.fw) * 1.15);
+    }
+    return 2.4;
+  }
+  function frameBody(b, instant){
+    var pad = 90;
+    var s = clamp(Math.min((W - pad*2)/Math.max(1, b.hw*2), (H - pad*2)/Math.max(1, b.hh*2)), 0.08, maxZoom(b));
+    if (instant){ cam.x = b.x; cam.y = b.y; cam.scale = s; camT.on = false; }
+    else { camT.x = b.x; camT.y = b.y; camT.scale = s; camT.on = true; }
+  }
+  function frameAll(instant){
+    var sx0 = cam.x, sy0 = cam.y, ss0 = cam.scale;
+    fitView(60);
+    if (instant) return;
+    camT.x = cam.x; camT.y = cam.y; camT.scale = cam.scale; camT.on = true;
+    cam.x = sx0; cam.y = sy0; cam.scale = ss0;
+  }
+  function stepBody(k){
+    for (var i=0;i<bodies.length;i++){
+      var b = bodies[i];
+      if (b.stepIdx === k) return b;
+      for (var p=0;p<b.pins.length;p++) if (b.pins[p].stepIdx === k) return b;
+    }
+    return null;
+  }
+  function setUrlStep(k){
+    var sp = new URLSearchParams(location.search);
+    if (k >= 1 && k <= stepsTotal) sp.set('step', String(k)); else sp['delete']('step');
+    var qs = sp.toString();
+    history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
+  }
+  // Only the step being arrived at animates; anything skipped over (deep links,
+  // esc to overview) shows instantly so scrubbing never queues a light show.
+  function markReveals(k){
+    var t0 = nowMs || performance.now();
+    bodies.forEach(function(b){
+      if (b.stepIdx === k) b.revT = t0;
+      b.pins.forEach(function(p){ if (p.stepIdx === k) p.revT = t0; });
+    });
+    edges.forEach(function(e){ if (e.stepIdx === k) e.revT = t0; });
+  }
+  function gotoStep(k, instant){
+    k = Math.round(clamp(k, 1, stepsTotal + 1));
+    if (k > cur && k <= stepsTotal) markReveals(k);
+    cur = k;
+    setUrlStep(k);
+    if (k <= stepsTotal){ var b = stepBody(k); if (b) frameBody(b, instant); }
+    else frameAll(instant);
+  }
+
+  function roundRect(x, y, w, h, r){
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function drawCard(b){
+    var a = aOf(b);
+    if (a <= 0) return;
+    if (b.type === 'figure'){
+      var fx = figX(b) - b.fw/2, fy = figY(b) - b.fh/2;
+      ctx.globalAlpha = a;
+      if (b.img){ ctx.drawImage(b.img, fx, fy, b.fw, b.fh); }
+      else { // missing/broken image: name the file rather than failing silently
+        ctx.fillStyle = BG; ctx.fillRect(fx, fy, b.fw, b.fh);
+        ctx.fillStyle = DIM; ctx.font = FONT_LABEL;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(String(b.n.src || 'missing image'), figX(b), figY(b));
+      }
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = BORDER; ctx.lineWidth = 1;
+      sketchRect(fx - 1, fy - 1, b.fw + 2, b.fh + 2, b.jit, a);
+      var yy = fy + b.fh + 16;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+      ctx.font = FONT_CAP; ctx.fillStyle = MUTED; ctx.globalAlpha = a;
+      for (var c=0;c<b.capLines.length;c++){ ctx.fillText(b.capLines[c], figX(b), yy); yy += CAP_LH; }
+      if (b.legend && b.legendLines){
+        // legend entries reveal with their pin's step, like side labels do
+        yy += 6; ctx.textAlign = 'left'; ctx.font = FONT_LABEL;
+        for (var g=0; g<b.legendLines.length; g++){
+          var la = aOf(b.legendLines[g].pin);
+          if (la <= 0){ yy += LABEL_LH; continue; }
+          ctx.globalAlpha = la;
+          ctx.fillStyle = b.legendLines[g].first ? TEXT : MUTED;
+          ctx.fillText(b.legendLines[g].t, fx + 4, yy); yy += LABEL_LH;
+        }
+      }
+      ctx.globalAlpha = 1;
+    } else if (b.type === 'note'){
+      // a note leans a degree or two off square, like something pinned up —
+      // soft panel only, no frame: frames are for evidence (figures), text
+      // rides on quiet rounded backgrounds
+      ctx.save();
+      ctx.translate(b.x, b.y); ctx.rotate(b.rot);
+      roundRect(-b.hw, -b.hh, b.hw*2, b.hh*2, 7);
+      ctx.fillStyle = TEXT; ctx.globalAlpha = 0.07 * a; ctx.fill();
+      ctx.globalAlpha = a;
+      ctx.font = FONT_NOTE; ctx.fillStyle = TEXT;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      for (var i=0;i<b.noteLines.length;i++)
+        ctx.fillText(b.noteLines[i], -b.hw + PAD, -b.hh + PAD + 12 + i * NOTE_LH);
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    } else {
+      // item chips are the interactive things, so they are the accent-tinted
+      // things: a quiet pill, no border stroke
+      roundRect(b.x - b.hw, b.y - b.hh, b.hw*2, b.hh*2, b.hh);
+      ctx.fillStyle = ACCENT; ctx.globalAlpha = 0.13 * a; ctx.fill();
+      ctx.globalAlpha = a;
+      ctx.font = FONT_CHIP; ctx.fillStyle = ACCENT;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(b.chipLabel, b.x, b.y + 0.5);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // Edge endpoint: a pin ref lands exactly on the pin; otherwise the border of
+  // the DRAWN rect (the figure image, not its label cluster) toward the far end,
+  // so lines never start from empty space beside a card.
+  function edgeEnd(endp, twx, twy){
+    var b = endp.b;
+    if (endp.pin && b.type === 'figure'){
+      for (var i=0;i<b.pins.length;i++) if (b.pins[i].id === endp.pin) return pinAnchor(b, b.pins[i], twx, twy);
+    }
+    var cx = b.x, cy = b.y, hw = b.hw, hh = b.hh;
+    if (b.type === 'figure'){ cx = figX(b); cy = figY(b); hw = b.fw/2; hh = b.fh/2; }
+    var dx = twx - cx, dy = twy - cy;
+    var tx = dx !== 0 ? hw / Math.abs(dx) : 1e9, ty = dy !== 0 ? hh / Math.abs(dy) : 1e9;
+    var t = Math.min(tx, ty, 1);
+    return { x: cx + dx * t, y: cy + dy * t };
+  }
+
+  function drawEdge(ed){
+    var ea = aOf(ed);
+    if (ea <= 0) return;
+    var zb = ed.z.b, zc = { x: zb.type === 'figure' ? figX(zb) : zb.x, y: zb.type === 'figure' ? figY(zb) : zb.y };
+    var pa = edgeEnd(ed.a, zc.x, zc.y);
+    var pz = edgeEnd(ed.z, pa.x, pa.y);
+    var dl = Math.sqrt((pz.x-pa.x)*(pz.x-pa.x) + (pz.y-pa.y)*(pz.y-pa.y)) || 1;
+    var bow = clamp(ed.bowk * dl * 0.35, -64, 64);
+    ctx.strokeStyle = MUTED; ctx.globalAlpha = 0.55; ctx.lineWidth = 1;
+    // rare figure-to-figure ties read as "special" — dash them apart from claims
+    if (ed.a.b.type === 'figure' && ed.z.b.type === 'figure' && !ed.a.pin && !ed.z.pin) ctx.setLineDash([5,5]);
+    var c = sketchSeg(pa.x, pa.y, pz.x, pz.y, bow, ea);
+    ctx.setLineDash([]);
+    if (ea > 0.85){
+      // the arrowhead lands only once the pen arrives
+      ctx.globalAlpha = 0.55 * (ea - 0.85) / 0.15;
+      var ang = Math.atan2(pz.y - c.y, pz.x - c.x);
+      ctx.beginPath();
+      ctx.moveTo(pz.x - 9*Math.cos(ang - 0.5 - (ed.j-0.5)*0.14), pz.y - 9*Math.sin(ang - 0.5 - (ed.j-0.5)*0.14));
+      ctx.lineTo(pz.x, pz.y);
+      ctx.lineTo(pz.x - 10*Math.cos(ang + 0.42 + (ed.j-0.5)*0.14), pz.y - 10*Math.sin(ang + 0.42 + (ed.j-0.5)*0.14));
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    if (ed.label){
+      // sit the label on the curve itself (quad midpoint), not the chord
+      ctx.globalAlpha = ea;
+      var mx = 0.25*pa.x + 0.5*c.x + 0.25*pz.x, my = 0.25*pa.y + 0.5*c.y + 0.25*pz.y;
+      ctx.font = FONT_LABEL; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.lineWidth = 3; ctx.strokeStyle = BG; ctx.lineJoin = 'round';
+      ctx.strokeText(ed.label, mx, my - 8);
+      ctx.fillStyle = DIM; ctx.fillText(ed.label, mx, my - 8);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function numberedRing(x, y, pin, a){
+    ctx.globalAlpha = 0.82 * a; ctx.fillStyle = BG;
+    ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = ACCENT; ctx.lineWidth = 1.3;
+    sketchCircle(x, y, 8.5, pin.j, a);
+    if (a > 0.7){
+      ctx.globalAlpha = (a - 0.7) / 0.3;
+      ctx.fillStyle = ACCENT; ctx.font = 'bold 10px "IBM Plex Mono", monospace';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(String(pin.num), x, y + 0.5);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function drawCallouts(b){
+    for (var i=0;i<b.labels.length;i++){
+      var lb = b.labels[i], la = aOf(lb.pin);
+      if (la <= 0) continue;
+      var lx = figX(b) + lb.dx, ly = figY(b) + lb.dy;
+      var ax = lb.side === 'l' ? lx + LABEL_W + 4 : lx - 4;
+      var ay = ly + lb.h/2;
+      var p = pinAnchor(b, lb.pin, ax, ay);
+      // annotation ink: a bowed leader drawn FROM the label TOWARD the pin, so
+      // the eye travels in reading order (claim first, then the spot). The
+      // negated bow keeps the resting curve byte-identical to the old
+      // pin-to-label direction.
+      var dlx = ax - p.x, dly = ay - p.y, dl = Math.sqrt(dlx*dlx + dly*dly) || 1;
+      ctx.strokeStyle = ACCENT; ctx.lineWidth = 1.1; ctx.globalAlpha = 0.7;
+      sketchSeg(ax, ay, p.x, p.y, -clamp(lb.bowk * dl * 0.5, -30, 30), la);
+      // inner-edge-aligned text reads toward its pin; each label leans a hair
+      ctx.save();
+      var tx = lb.side === 'l' ? lx + LABEL_W : lx;
+      ctx.translate(tx, ly); ctx.rotate(lb.rot);
+      // a soft rounded panel — no border — is each claim's boundary, so a
+      // stack of callouts reads as discrete cards rather than one run of text
+      roundRect(lb.side === 'l' ? -lb.tw - 9 : -7, -4, lb.tw + 16, lb.h + 9, 5);
+      ctx.fillStyle = TEXT; ctx.globalAlpha = 0.08 * la; ctx.fill();
+      ctx.globalAlpha = la;
+      ctx.font = FONT_LABEL; ctx.textBaseline = 'alphabetic';
+      ctx.textAlign = lb.side === 'l' ? 'right' : 'left';
+      for (var k=0;k<lb.lines.length;k++){
+        var yy = 11 + k * LABEL_LH;
+        ctx.lineWidth = 3; ctx.strokeStyle = BG; ctx.lineJoin = 'round';
+        ctx.strokeText(lb.lines[k], 0, yy);
+        ctx.fillStyle = TEXT; ctx.fillText(lb.lines[k], 0, yy);
+      }
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
+    for (var q=0;q<b.pins.length;q++){
+      var pin = b.pins[q], pa2 = aOf(pin);
+      if (pa2 <= 0) continue;
+      var w = pinWorld(b, pin);
+      if (pin.region){
+        // a light, translucent rectangle around the precise part of the image;
+        // the leader (or the corner number, in legend mode) does the pointing
+        var rr = pinRectWorld(b, pin);
+        ctx.strokeStyle = ACCENT; ctx.lineWidth = 1.2; ctx.globalAlpha = 0.45 * pa2;
+        sketchRect(rr.x, rr.y, rr.w, rr.h, pin.j, pa2);
+        ctx.globalAlpha = 1;
+        if (b.legend) numberedRing(rr.x, rr.y, pin, pa2); // ride the corner
+      } else if (b.legend){
+        // legend mode: the number IS the pointer — it indexes into the list
+        // below the figure, so it keeps its housed, numbered ring
+        numberedRing(w.x, w.y, pin, pa2);
+      } else {
+        // side-label mode: the leader already points here — no number, and
+        // translucent so the evidence keeps its visual field
+        ctx.strokeStyle = ACCENT; ctx.lineWidth = 1.2; ctx.globalAlpha = 0.45 * pa2;
+        sketchCircle(w.x, w.y, 7, pin.j, pa2);
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+
+  function loop(){
+    nowMs = performance.now();
+    if (camT.on){
+      // eased camera glide toward the presentation target; any manual pan or
+      // zoom cancels it (camT.on cleared in those handlers)
+      cam.x += (camT.x - cam.x) * 0.14;
+      cam.y += (camT.y - cam.y) * 0.14;
+      cam.scale += (camT.scale - cam.scale) * 0.14;
+      if (Math.abs(camT.x - cam.x) < 0.5 && Math.abs(camT.y - cam.y) < 0.5 &&
+          Math.abs(camT.scale - cam.scale) < 0.004) camT.on = false;
+    }
+    ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    ctx.translate(W/2, H/2); ctx.scale(cam.scale, cam.scale); ctx.translate(-cam.x, -cam.y);
+    for (var i=0;i<bodies.length;i++) drawCard(bodies[i]);
+    for (var e=0;e<edges.length;e++) drawEdge(edges[e]);
+    for (var f=0;f<bodies.length;f++) if (bodies[f].type === 'figure') drawCallouts(bodies[f]);
+    ctx.restore();
+    if (cur <= stepsTotal){
+      var hud = cur + ' / ' + stepsTotal + '  \\u2014  arrows step \\u00b7 esc overview';
+      ctx.font = FONT_LABEL; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      ctx.lineWidth = 3; ctx.strokeStyle = BG; ctx.lineJoin = 'round';
+      ctx.strokeText(hud, 12, H - 12);
+      ctx.fillStyle = MUTED; ctx.fillText(hud, 12, H - 12);
+    }
+    requestAnimationFrame(loop);
+  }
+
+  function pick(mx, my){
+    var wx = toWorldX(mx), wy = toWorldY(my);
+    for (var i=bodies.length-1;i>=0;i--){
+      var b = bodies[i];
+      if (b.stepIdx > cur) continue; // not revealed yet — not clickable
+      if (b.type === 'figure'){
+        if (Math.abs(wx - figX(b)) <= b.fw/2 && Math.abs(wy - figY(b)) <= b.fh/2) return b;
+      } else if (b.type === 'item'){
+        if (Math.abs(wx - b.x) <= b.hw && Math.abs(wy - b.y) <= b.hh) return b;
+      }
+    }
+    return null;
+  }
+  function pos(ev){ var rc = canvas.getBoundingClientRect(); return { x: ev.clientX - rc.left, y: ev.clientY - rc.top }; }
+
+  // The camera is the only draggable thing (v0 rule: no hand-placed nodes).
+  var panning = false, panSX = 0, panSY = 0, panCX = 0, panCY = 0, movedFar = false;
+  canvas.addEventListener('mousedown', function(ev){
+    var p = pos(ev);
+    stopPlay();
+    panning = true; movedFar = false; camT.on = false;
+    panSX = p.x; panSY = p.y; panCX = cam.x; panCY = cam.y;
+    canvas.style.cursor = 'grabbing';
+  });
+  canvas.addEventListener('mousemove', function(ev){
+    var p = pos(ev);
+    if (panning){
+      if (Math.abs(p.x - panSX) + Math.abs(p.y - panSY) > 4) movedFar = true;
+      cam.x = panCX - (p.x - panSX)/cam.scale; cam.y = panCY - (p.y - panSY)/cam.scale;
+    } else canvas.style.cursor = pick(p.x, p.y) ? 'pointer' : 'grab';
+  });
+  window.addEventListener('mouseup', function(ev){
+    if (!panning) return;
+    panning = false; canvas.style.cursor = 'grab';
+    if (movedFar) return;
+    var p = pos(ev), t = pick(p.x, p.y);
+    if (!t) return;
+    if (t.type === 'item'){
+      var lk = parseLink(t.n.link);
+      if (lk.item) window.location.href = '/ctx/' + encodeURIComponent(lk.ctx) + '/' + encodeURIComponent(lk.item);
+    } else if (t.type === 'figure' && t.n.src){
+      window.open(String(t.n.src), '_blank'); // full-resolution asset
+    }
+  });
+  canvas.addEventListener('wheel', function(ev){
+    ev.preventDefault();
+    stopPlay();
+    camT.on = false;
+    var p = pos(ev), wx = toWorldX(p.x), wy = toWorldY(p.y);
+    cam.scale = clamp(cam.scale * Math.pow(1.0016, -ev.deltaY), 0.06, 6);
+    cam.x = wx - (p.x - W/2)/cam.scale; cam.y = wy - (p.y - H/2)/cam.scale;
+  }, { passive: false });
+  canvas.addEventListener('dblclick', function(ev){ var p = pos(ev); if (!pick(p.x, p.y)) fitView(60); });
+  function zoomBy(f){ camT.on = false; cam.scale = clamp(cam.scale * f, 0.06, 6); }
+
+  // Presentation controls: slides muscle memory. Right/space/pagedown advance,
+  // left/pageup step back (from the overview, back into the last step), escape
+  // jumps to the overview, home restarts. The URL tracks the step (?step=N) so
+  // any moment is a deep link.
+  window.addEventListener('keydown', function(ev){
+    if (ev.altKey || ev.ctrlKey || ev.metaKey) return;
+    stopPlay();
+    var k = ev.key;
+    if (k === 'ArrowRight' || k === ' ' || k === 'PageDown'){
+      if (cur <= stepsTotal){ gotoStep(cur + 1); ev.preventDefault(); }
+    } else if (k === 'ArrowLeft' || k === 'PageUp'){
+      if (cur > 1){ gotoStep(cur - 1); ev.preventDefault(); }
+    } else if (k === 'Escape'){
+      if (cur <= stepsTotal){ gotoStep(stepsTotal + 1); ev.preventDefault(); }
+    } else if (k === 'Home'){
+      if (stepsTotal > 0){ gotoStep(1); markReveals(1); ev.preventDefault(); }
+    }
+  });
+  var pres = document.getElementById('board-present');
+  if (pres) pres.addEventListener('click', function(ev){
+    ev.preventDefault();
+    stopPlay();
+    gotoStep(1);
+    markReveals(1); // restarting should draw the first reveal, not just show it
+  });
+  // Auto-present straight from the toolbar: same run as ?play=1, no URL
+  // knowledge required (the href is the no-JS fallback).
+  var auto = document.getElementById('board-auto');
+  if (auto) auto.addEventListener('click', function(ev){
+    ev.preventDefault();
+    gotoStep(1);
+    markReveals(1);
+    startPlay(2500);
+  });
+  var zi = document.getElementById('board-zoom-in'), zo = document.getElementById('board-zoom-out'), zf = document.getElementById('board-fit');
+  if (zi) zi.addEventListener('click', function(){ zoomBy(1.3); });
+  if (zo) zo.addEventListener('click', function(){ zoomBy(1/1.3); });
+  if (zf) zf.addEventListener('click', function(){ fitView(60); });
+  window.addEventListener('resize', resize);
+
+  // Load every figure's image first (broken ones render as named placeholders),
+  // then measure, seed, relax off-screen until calm, and only then paint.
+  function start(){
+    resize();
+    bodies.forEach(measureBody);
+    // Step numbering: declaration order is the script — each body, then each
+    // of its pins, in file order. Edges take the step of their last dependency.
+    var sc = 0;
+    bodies.forEach(function(b){
+      b.stepIdx = ++sc; b.revT = 0;
+      b.pins.forEach(function(p){ p.stepIdx = ++sc; p.revT = 0; });
+    });
+    stepsTotal = sc;
+    cur = stepsTotal + 1; // default view: the whole board, no ceremony
+    edges.forEach(function(e){
+      var ai = e.a.b.stepIdx, zi = e.z.b.stepIdx;
+      if (e.a.pin) e.a.b.pins.forEach(function(p){ if (p.id === e.a.pin) ai = p.stepIdx; });
+      if (e.z.pin) e.z.b.pins.forEach(function(p){ if (p.id === e.z.pin) zi = p.stepIdx; });
+      e.stepIdx = Math.max(ai, zi); e.revT = 0;
+    });
+    for (var i=0;i<bodies.length;i++){
+      var a = i * 2.399963 + rnd() * 0.6, rad = Math.sqrt(i + 0.6) * FIG_MAX * 0.85;
+      bodies[i].x = Math.cos(a) * rad + (rnd() - 0.5) * 30;
+      bodies[i].y = Math.sin(a) * rad + (rnd() - 0.5) * 30;
+    }
+    var wv = 1;
+    for (var w=0; w<1600 && (w < 120 || wv > 0.35); w++) wv = step();
+    fitView(60);
+    // Settled geometry, exposed for the board-check harness (scripts/
+    // board-check.js) to assert against — the numbers the real renderer uses,
+    // not a parallel reimplementation. Not part of any supported page API.
+    window.__boardDebug = {
+      labelW: LABEL_W,
+      stepCount: stepsTotal,
+      bodies: bodies.map(function(b){
+        return { id: b.id, type: b.type, x: b.x, y: b.y, hw: b.hw, hh: b.hh,
+          cx: b.cx, cy: b.cy, fw: b.fw, fh: b.fh,
+          natW: b.img ? b.img.naturalWidth : 0, natH: b.img ? b.img.naturalHeight : 0,
+          legend: b.legend,
+          pins: b.pins.map(function(p){ return { id: p.id, nx: p.nx, ny: p.ny, num: p.num, region: !!p.region, rw: p.rw, rh: p.rh }; }),
+          labels: b.labels.map(function(l){ return { side: l.side, dx: l.dx, dy: l.dy, h: l.h, pin: l.pin.id }; }) };
+      }),
+      edges: edges.map(function(e){
+        return { from: e.a.b.id, fromPin: e.a.pin, to: e.z.b.id, toPin: e.z.pin };
+      })
+    };
+    // ?step=N enters presentation at that step (camera snapped, no catch-up
+    // animation for everything already on the board by then).
+    var q = new URLSearchParams(location.search).get('step');
+    if (q && stepsTotal > 0) gotoStep(parseInt(q, 10) || 1, true);
+    // ?play=<ms>: hands-free walkthrough for recording rigs. Reaching the
+    // overview sets window.__boardPlayDone and fires "board-play-done" so a
+    // driving agent knows when the take is over.
+    var pq = new URLSearchParams(location.search).get('play');
+    if (pq && stepsTotal > 0){
+      if (!q) gotoStep(1, true);
+      startPlay((pq === '1' || pq === 'true') ? 2500 : Math.max(400, parseInt(pq, 10) || 2500));
+    }
+    requestAnimationFrame(loop);
+  }
+  // Layout gates: every figure image, plus the webfont. Font metrics feed
+  // measureText, measureText feeds label wrapping, wrapping feeds cluster
+  // sizes — measuring before the font resolves makes the settle depend on a
+  // network race (board-check caught exactly this as a determinism failure).
+  var gates = 1; // the font gate; each figure image arms one more
+  function gateDone(){ if (--gates === 0) start(); }
+  bodies.forEach(function(b){
+    if (b.type !== 'figure') return;
+    gates++;
+    var im = new Image();
+    im.onload = function(){ b.img = im; gateDone(); };
+    im.onerror = function(){ gateDone(); };
+    im.src = String(b.n.src || ''); // relative: resolves into this context's assets/
+  });
+  if (document.fonts && document.fonts.load){
+    Promise.all([document.fonts.load(FONT_LABEL), document.fonts.load(FONT_NOTE)])
+      .then(gateDone, gateDone);
+  } else gateDone();
+})();
+`;
+
+// A \`view: board\` markdown item rendered as an evidence board. The route has
+// already validated that fenceRaw parses as JSON with a nodes array; it is
+// embedded as an application/json script tag (with < escaped so a string value
+// can never close the tag) and drawn by BOARD_SCRIPT. ?doc=1 is the escape
+// hatch back to the ordinary document rendering of the same item.
+export function boardViewPage(
+  context: string,
+  itemName: string,
+  title: string,
+  fenceRaw: string,
+  // kiosk (?kiosk=1): board only, no chrome — the recordable presentation
+  // surface (layout hides the header/footer; we skip our own breadcrumb/title)
+  kiosk: boolean = false,
+): string {
+  const self = `/ctx/${encodeURIComponent(context)}/${encodeURIComponent(itemName)}`;
+  const pageChrome = kiosk
+    ? ""
+    : `
+      <div class="breadcrumb"><a href="/">Contexts</a> / <a href="/ctx/${encodeURIComponent(context)}">${esc(context)}</a> / <strong>${esc(itemName)}</strong></div>
+      <h2>${esc(title)}</h2>
+      <p class="graph-intro">Evidence board. <span class="graph-hint">Scroll to zoom, drag to pan, double-click empty space to fit. Click a chip to open its item, a figure to open the full image. Present steps through the board in file order.</span>
+        <a href="${self}?step=1" id="board-present">present</a> &middot; <a href="${self}?step=1&amp;play=1" id="board-auto">auto</a> &middot; <a href="${self}?doc=1">document view</a> &middot; <a href="${self}?raw=1">raw</a> &middot; <a href="${self}/edit">edit</a></p>`;
+  return layout(
+    title,
+    `
+    <div class="board-page">${pageChrome}
+      <div id="board-wrap" data-context="${esc(context)}">
+        <canvas id="board-canvas"></canvas>
+        <div class="graph-controls" aria-hidden="true">
+          <button type="button" id="board-zoom-in" title="Zoom in">+</button>
+          <button type="button" id="board-fit" title="Fit board to view">&#9633;</button>
+          <button type="button" id="board-zoom-out" title="Zoom out">&minus;</button>
+        </div>
+        <div id="board-empty" class="empty" style="display:none;"></div>
+      </div>
+      <script type="application/json" id="board-data">${fenceRaw.replace(/</g, "\\u003c")}</script>
+      <script>${BOARD_SCRIPT}</script>
+    </div>`,
+    { fullWidth: true, kiosk }
   );
 }
 

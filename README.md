@@ -31,7 +31,7 @@ That's it. It rebuilds `dist/`, prompts for data dir + UI port, and (on Windows)
 |---|---|
 | Install, reconfigure, or recover | `npm run setup` |
 | Start the UI | `npm run ui` *or* `npx contexts-mcp-ui` |
-| Confirm things are wired up | `npm run sanity` |
+| Confirm things are wired up | `npm test` |
 | See "what am I pointing at?" | open the UI → footer **About**, or call `context_diagnose` |
 
 ## First-time setup
@@ -156,15 +156,21 @@ All tools the server exposes:
 - `get_context` — read a context's metadata.
 - `update_context_metadata` — patch a context's metadata (only passed fields change). Set `status: 'archived'` to archive.
 - `list_items` — list items in a context.
-- `get_item` — read an item's parsed content (markdown returns frontmatter + body; others return raw text).
-- `get_item_raw` — byte-for-byte content of an item on disk, including markdown frontmatter. Returns `{content, filename, contentType, extension, size}`.
+- `get_item` — read an item's parsed content (markdown returns frontmatter + body; others return raw text), plus a compact Connections footer. Items over ~60 KB are cut at a line boundary with a note; page with `offset`/`limit` (1-based lines). `raw=true` returns the byte-for-byte file as JSON (`{content, filename, contentType, extension, size}`), never paged.
 - `create_item` — create a new item; specify extension, optionally title/tags for markdown.
-- `update_item` — replace an item's content (and title/tags for markdown).
+- `edit_item` — replace an exact substring (`old_string` to `new_string`). The cheap way to change part of an item: only the changed text crosses the wire. `old_string` must occur exactly once unless `replace_all=true`. Snapshots for `revert_item`.
+- `update_item` — replace an item's whole content (and title/tags for markdown). Prefer `edit_item` for partial changes.
 - `append_to_item` — append to an existing md/txt/csv/sql item. Errors on json/yaml/yml.
+- `revert_item` — swap an item back to the snapshot taken by the last update/append/edit (one-shot).
 - `delete_item` — delete a single item (destructive).
-- `search_contexts` — full-text search across all items, with optional filters by context, per-item tags, context status, or context tags. Archived contexts skipped unless `include_archived=true`.
+- `search_contexts` — full-text search across all items, best matches first (title and tag hits rank above body hits). `limit` (default 20) and `lines_per_item` (default 5, each trimmed to ~200 chars) bound the payload; optional filters by context, per-item tags, context status, or context tags. Archived contexts skipped unless `include_archived=true`.
+- `get_item_links` / `get_graph` — the context graph: an item's links, backlinks and related items; or the whole node/edge map.
+- `rebuild_graph` — rebuild the graph on demand. Automatic rebuilds (after writes, in the background) are incremental: only changed items are re-read, re-tokenized and re-scored, and neighbour lists are patched in place (about 100 ms at a few thousand items). `mode: 'full'` (the default here, and the button on the `/graph` page) drops every cache and runs the exact all-pairs similarity for the best link quality, which can take minutes on a large corpus. Returns what the build did: pass (`incremental`, `pruned-full`, `exact`), items re-indexed and re-scored, time.
+- `add_attachment` / `list_attachments` / `delete_attachment` — binary files in a context's `assets/` folder.
 - `context_diagnose` — return `{dataDir, configPath, version, contextCount, archivedCount, itemCount, totalBytes, lastScanMs}`. Cheap to call. Confirms "what data dir is this process actually reading?" when things look wrong.
-- `context_migration_brief` — returns a markdown guide covering formats, naming rules, frontmatter shape, and a recommended workflow for importing existing notes.
+- `get_guide` — built-in guides: `migration` (importing existing notes) and `mermaid` (diagrams that render in the UI).
+
+The server speaks MCP 2026-07-28 (stateless core, `server/discover`, cache hints on `tools/list`) and still serves the 2025 `initialize` handshake to older hosts. Every tool carries `readOnlyHint` / `destructiveHint` annotations.
 
 ---
 
@@ -231,10 +237,14 @@ npm run watch    # tsc --watch
 npm run start    # node dist/index.js (stdio; for direct testing)
 npm run ui       # node dist/web.js (browser UI)
 npm run setup    # reconfigure data dir / UI port
-npm run sanity   # invariant checks — ~1s, catches quiet wrongness
-npm run bench    # write-path benchmark — baselines createItem / list p50/p95/p99
+npm test         # build + node --test: storage/graph invariants, protocol-level tests, perf budgets (~2s)
+npm run bench    # in-process write-path benchmark (storage functions)
+npm run bench:mcp  # end-to-end benchmark: spawns the server over stdio, drives it with the official client
+npm run scale      # synthetic large-corpus probe (N=contexts K=items): graph build cold/incremental, search
 ```
 
-`scripts/sanity.js` and `scripts/bench.js` both run against a throwaway data dir under `$TMPDIR`. They don't touch your configured `dataDir`.
+`npm run bench:mcp` reports latency (p50/p95/max) and response payload (bytes and ~tokens) per tool, because payload is what a model has to read and Claude Code truncates any single MCP result over ~25k tokens. `BENCH_CORPUS=<data dir>` benchmarks a copy of a real corpus (items only); `BENCH_OUT=file.json` saves numbers for before/after comparison.
+
+Tests and benchmarks all run against a throwaway data dir under `$TMPDIR`. They don't touch your configured `dataDir`.
 
 Diagnostics go to stderr; stdout is reserved for the MCP JSON-RPC transport.

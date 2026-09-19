@@ -31,6 +31,7 @@ import {
   searchPage,
   themeLabPage,
   graphPage,
+  boardViewPage,
   anchorHeadings,
   TocEntry,
 } from "./templates.js";
@@ -470,6 +471,13 @@ app.post("/ctx/:context/assets/:filename/reveal", (req, res) => {
   }
 });
 
+// The first ```board fence in a `view: board` item is the board's declaration.
+// Tolerant of trailing whitespace after the language tag and CRLF bodies.
+function extractBoardFence(md: string): string | null {
+  const m = /```board[ \t]*\r?\n([\s\S]*?)\r?\n[ \t]*```/.exec(md);
+  return m ? m[1] : null;
+}
+
 app.get("/ctx/:context/:item", async (req, res) => {
   try {
     const { context, item: itemName } = req.params;
@@ -477,6 +485,29 @@ app.get("/ctx/:context/:item", async (req, res) => {
     const rawMode = parseTruthy(req.query.raw);
     const item = await storage.getItem(context, itemName, preferred);
     const isMarkdown = item.extension === "md";
+    // Board view: opt-in via `view: board` frontmatter, with ?doc=1 as the
+    // escape hatch back to the document rendering. Any defect in the fence
+    // (missing, unparseable, no nodes) falls through to the document view,
+    // where the fence shows as an ordinary code block — never a dead page.
+    if (isMarkdown && !rawMode && item.frontmatter?.view === "board" && !parseTruthy(req.query.doc)) {
+      const fence = extractBoardFence(item.content);
+      let board: unknown = null;
+      try {
+        board = fence ? JSON.parse(fence) : null;
+      } catch {
+        board = null;
+      }
+      if (
+        fence &&
+        board &&
+        typeof board === "object" &&
+        Array.isArray((board as { nodes?: unknown }).nodes) &&
+        ((board as { nodes: unknown[] }).nodes.length > 0)
+      ) {
+        res.send(boardViewPage(context, itemName, item.frontmatter?.title || itemName, fence, parseTruthy(req.query.kiosk)));
+        return;
+      }
+    }
     let contentHtml: string;
     let toc: TocEntry[] = [];
     if (rawMode) {
@@ -516,6 +547,8 @@ app.get("/ctx/:context/:item", async (req, res) => {
         hasBackup,
         toc,
         connections,
+        // board items viewed as documents (?doc=1) get a way back to the board
+        isMarkdown && item.frontmatter?.view === "board",
       )
     );
   } catch (err: unknown) {
@@ -650,9 +683,12 @@ app.get("/search", async (req, res) => {
     return;
   }
 
-  const results = await searchContexts(storage.getDataDir(), q, {
+  // The web page lists everything (it renders a scrollable page, not a
+  // model's context window), so lift the MCP-oriented default limit.
+  const { results } = await searchContexts(storage.getDataDir(), q, {
     contextFilter: context || undefined,
     includeArchived,
+    limit: 500,
   });
   res.send(searchPage(results, q, context, contextNames, includeArchived));
 });
@@ -671,7 +707,20 @@ app.get("/diagnose", async (_req, res) => {
 // and applies data-* attributes to <html>.
 app.get("/graph", (req, res) => {
   const ctx = typeof req.query.ctx === "string" ? req.query.ctx : "";
-  res.send(graphPage(parseTruthy(req.query.archived), ctx));
+  const rebuilt = typeof req.query.rebuilt === "string" ? req.query.rebuilt : "";
+  res.send(graphPage(parseTruthy(req.query.archived), ctx, rebuilt, graph.lastBuildStats()));
+});
+
+// Manual full rebuild from the graph page. Synchronous on purpose: the
+// person asked for the expensive, exact pass and wants to know when it landed.
+app.post("/graph/rebuild", async (req, res) => {
+  const mode = req.body && req.body.mode === "auto" ? "auto" : "full";
+  try {
+    const s = await graph.rebuildGraph(mode);
+    res.redirect(`/graph?rebuilt=${encodeURIComponent(`${s.mode} ${s.pass} ${s.similarity} ${(s.ms / 1000).toFixed(1)}s ${s.nodes} nodes ${s.edges} edges`)}`);
+  } catch (err: unknown) {
+    res.status(500).send(err instanceof Error ? err.message : String(err));
+  }
 });
 
 app.get("/graph.json", async (req, res) => {
