@@ -485,6 +485,8 @@ export const styles = `
       font-family: 'IBM Plex Mono', monospace;
       vertical-align: baseline;
     }
+    /* boards read as their own kind in listings, not as generic markdown */
+    .item-kind-board { color: var(--accent); border-color: var(--accent); }
 
     /* --- Context meta header --- */
     .ctx-meta-header {

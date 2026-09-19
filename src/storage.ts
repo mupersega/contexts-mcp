@@ -828,6 +828,7 @@ export async function listItems(context: string): Promise<ItemInfo[]> {
           extension: parsed.ext,
           title: data.title || parsed.base,
           tags: Array.isArray(data.tags) ? data.tags : [],
+          view: typeof data.view === "string" ? data.view : undefined,
           created: data.created || statCreatedISO(stat),
           updated: data.updated || stat.mtime.toISOString(),
           size: stat.size,

@@ -341,6 +341,11 @@ declaration (JSON). Everything else in the body is shown only in ?doc=1 mode.
   "1", "2", ... in declaration order). Optional \`label\`.
 - Layout is automatic and deterministic (same file, same arrangement) — never
   write positions. Figures with 6+ pins collapse to a numbered legend.
+- group: any node may carry \`"group": "<id>"\` — nodes sharing a group settle
+  together inside a faint titled region, and the regions pack against each
+  other (optional top-level \`"groups": {"<id>": {"title": "..."}}\` names
+  them). ONE level only, no nesting. Use a group per study/screen/topic; keep
+  cross-cutting notes ungrouped so they sit between the regions they discuss.
 
 ## Order is the presentation
 

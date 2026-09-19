@@ -110,6 +110,54 @@ const FENCE = {
   ],
 };
 
+// Stress fixture: the wild-agent shape that broke the first sim — six figures
+// in linked ref/copy pairs, wordy pins, long notes, chips wired into pins.
+// Dense enough that a settle which merely runs out of iterations (instead of
+// guaranteeing separation) prints text on text.
+const LONG = (n) =>
+  `finding ${n}: the copy diverges from the reference in value structure, edge quality and colour temperature across the passage`;
+const STRESS = {
+  groups: { "study-1": { title: "Study One" }, "study-2": "Study Two" }, // study-3 untitled: id fallback
+  nodes: [
+    ...[1, 2, 3].flatMap((p) => [
+      { id: `ref-${p}`, type: "figure", src: p % 2 ? "assets/wide.png" : "assets/tall.png",
+        group: `study-${p}`,
+        caption: `study ${p} reference with a caption long enough to wrap`,
+        pins: [1, 2, 3, 4].map((n) => ({ at: [(n * 0.2) % 1, (n * 0.23) % 1], text: LONG(n) })) },
+      { id: `copy-${p}`, type: "figure", src: p % 2 ? "assets/tall.png" : "assets/wide.png",
+        group: `study-${p}`,
+        caption: `study ${p} copy`,
+        pins: [1, 2, 3, 4, 5, 6, 7].map((n) => ({ at: [0.5, n / 8], text: LONG(n) })) },
+    ]),
+    ...[1, 2, 3, 4].map((n) => ({ id: `note-${n}`, type: "note",
+      text: `overview note ${n}: a long paragraph of critique text that wraps onto many lines and makes a tall card, the way a wild agent actually writes notes when summarizing a whole study` })),
+    // FOUR hub notes wired into all three copies — the wild board's exact
+    // lesson-note shape. Under this load the copies get dragged toward one
+    // over-subscribed middle, and a pair loses the geometry lottery unless
+    // annotative springs are weaker than structural ones.
+    ...["values", "edges", "temp", "draw"].map((k, i) => ({ id: `hub-${k}`, type: "note",
+      text: `lesson ${k}: a cross-study observation that applies to all three copies and drags them toward a common centre if its springs are as strong as the pair bonds` })),
+    { id: "chip-a", type: "item", link: "notes", label: "critique round one" },
+    { id: "chip-b", type: "item", link: "notes", label: "values" },
+    // late-declared multi-link chips: the wild board's "values"/"temperature"
+    // chips — last in the file, linked to early figures across the board
+    { id: "chip-late-1", type: "item", link: "notes", label: "temperature" },
+    { id: "chip-late-2", type: "item", link: "notes", label: "edges" },
+  ],
+  edges: [
+    // structural pair bonds: pin-to-pin between figures, as the wild agent wrote them
+    ...[1, 2, 3].flatMap((p) => [1, 2, 3].map((n) => ({ from: `ref-${p}#${n}`, to: `copy-${p}#${n}`, label: n === 1 ? "pair" : "" }))),
+    { from: "chip-a", to: "copy-1#2" },
+    { from: "chip-b", to: "ref-2#3" },
+    { from: "note-1", to: "copy-3#1" },
+    ...["values", "edges", "temp", "draw"].flatMap((k) =>
+      [1, 2, 3].map((p) => ({ from: `hub-${k}`, to: `copy-${p}#3` }))),
+    { from: "chip-late-1", to: "ref-1#1" },
+    { from: "chip-late-1", to: "copy-2#1" },
+    { from: "chip-late-2", to: "ref-3#2" },
+  ],
+};
+
 function writeFixture() {
   const ctxDir = path.join(dataDir, "board-test");
   fs.mkdirSync(path.join(ctxDir, "assets"), { recursive: true });
@@ -120,6 +168,11 @@ function writeFixture() {
   fs.writeFileSync(
     path.join(ctxDir, "board-test.md"),
     `---\ntitle: board fixture\ntags: []\nview: board\n---\n\n\`\`\`board\n${fence}\n\`\`\`\n`
+  );
+  const stress = JSON.stringify(STRESS, null, 2);
+  fs.writeFileSync(
+    path.join(ctxDir, "board-stress.md"),
+    `---\ntitle: board stress fixture\ntags: []\nview: board\n---\n\n\`\`\`board\n${stress}\n\`\`\`\n`
   );
 }
 
@@ -441,6 +494,104 @@ async function main() {
             throw new Error(`edge references ${endId}#${pinId}, which does not exist`);
         }
       }
+    });
+
+    // --- Dense-board stress: the wild-agent failure shape ---
+    const d3 = await loadBoard(browser, debugPort, `http://127.0.0.1:${uiPort}/ctx/board-test/board-stress`);
+    const sBodies = d3.bodies;
+    const sById = Object.fromEntries(sBodies.map((b) => [b.id, b]));
+
+    check("dense board: cluster rectangles still never overlap", () => {
+      const TOL = 8; // the contact-projection pass should leave real clearance
+      for (let i = 0; i < sBodies.length; i++)
+        for (let j = i + 1; j < sBodies.length; j++) {
+          const a = sBodies[i], b = sBodies[j];
+          const px = a.hw + b.hw - Math.abs(a.x - b.x);
+          const py = a.hh + b.hh - Math.abs(a.y - b.y);
+          if (px > TOL && py > TOL)
+            throw new Error(`${a.id} and ${b.id} overlap by (${px.toFixed(1)}, ${py.toFixed(1)})`);
+        }
+    });
+
+    check("dense board: edge-linked figures settle adjacent, not a diagonal apart", () => {
+      // Clear space allowed between linked cluster boxes: enough for a linked
+      // satellite (a chip or note wired into the pair) to sit in the corridor,
+      // nowhere near the original failure (pairs a full spiral apart).
+      const GAP_MAX = 320;
+      for (const [a, b] of [["ref-1", "copy-1"], ["ref-2", "copy-2"], ["ref-3", "copy-3"]]) {
+        const A = sById[a], B = sById[b];
+        const gx = Math.abs(A.x - B.x) - (A.hw + B.hw);
+        const gy = Math.abs(A.y - B.y) - (A.hh + B.hh);
+        const gap = Math.max(gx, gy);
+        if (gap > GAP_MAX)
+          throw new Error(`${a} and ${b} are ${gap.toFixed(0)} world units apart (max ${GAP_MAX})`);
+      }
+    });
+
+    check("dense board: every edge settles short at the unit level", () => {
+      // With groups, adjacency means the UNITS are close: a hub note against
+      // the region it annotates counts as adjacent even though its target
+      // member sits deep inside that region. Endpoints map to their group box
+      // when grouped, to their own body otherwise.
+      const EDGE_MAX = 450;
+      const memberGroup = {};
+      for (const g of d3.groups || []) for (const mid of g.members) memberGroup[mid] = g;
+      const unitRect = (id) => memberGroup[id] || sById[id];
+      let worst = 0, worstPair = "";
+      for (const e of d3.edges) {
+        const A = unitRect(e.from), B = unitRect(e.to);
+        if (A === B) continue; // same group — internal, near by construction
+        const gx = Math.abs(A.x - B.x) - (A.hw + B.hw);
+        const gy = Math.abs(A.y - B.y) - (A.hh + B.hh);
+        const gap = Math.max(gx, gy);
+        if (gap > worst) { worst = gap; worstPair = `${e.from}->${e.to}`; }
+      }
+      console.log(`        (worst unit-level edge gap: ${worst.toFixed(0)} world units, ${worstPair})`);
+      if (worst > EDGE_MAX)
+        throw new Error(`${worstPair} settles ${worst.toFixed(0)} world units apart at unit level (max ${EDGE_MAX})`);
+    });
+
+    check("groups: every region contains its members and regions never overlap", () => {
+      const groups = d3.groups;
+      if (!Array.isArray(groups) || groups.length !== 3)
+        throw new Error(`expected 3 groups, got ${groups ? groups.length : "none"}`);
+      for (const g of groups) {
+        for (const mid of g.members) {
+          const m = sById[mid];
+          if (Math.abs(m.x - g.x) + m.hw > g.hw + 0.5 || Math.abs(m.y - g.y) + m.hh > g.hh + 0.5)
+            throw new Error(`${mid} escapes region ${g.id}`);
+        }
+      }
+      for (let i = 0; i < groups.length; i++)
+        for (let j = i + 1; j < groups.length; j++) {
+          const a = groups[i], b = groups[j];
+          const px = a.hw + b.hw - Math.abs(a.x - b.x);
+          const py = a.hh + b.hh - Math.abs(a.y - b.y);
+          if (px > 1 && py > 1)
+            throw new Error(`regions ${a.id} and ${b.id} overlap by (${px.toFixed(1)}, ${py.toFixed(1)})`);
+        }
+      const titles = Object.fromEntries(groups.map((g) => [g.id, g.title]));
+      if (titles["study-1"] !== "Study One" || titles["study-2"] !== "Study Two" || titles["study-3"] !== "study-3")
+        throw new Error(`group titles wrong: ${JSON.stringify(titles)}`);
+    });
+
+    check("rest ink follows locality: long annotative edges retract, structural edges stay", () => {
+      const max = d3.annotRestMax;
+      if (typeof max !== "number") throw new Error("annotRestMax missing from __boardDebug");
+      let retracted = 0, visible = 0;
+      for (const e of d3.edges) {
+        const A = sById[e.from], B = sById[e.to];
+        const gap = Math.max(Math.abs(A.x - B.x) - (A.hw + B.hw), Math.abs(A.y - B.y) - (A.hh + B.hh));
+        if (!e.annot) {
+          if (!e.restVisible) throw new Error(`structural edge ${e.from}->${e.to} lost its resting ink`);
+          continue;
+        }
+        if (gap > max && e.restVisible)
+          throw new Error(`annotative edge ${e.from}->${e.to} keeps resting ink at gap ${gap.toFixed(0)} (max ${max})`);
+        if (e.restVisible) visible++; else retracted++;
+      }
+      console.log(`        (annotative edges: ${visible} visible at rest, ${retracted} retracted)`);
+      if (retracted === 0) throw new Error("fixture no longer produces any retracted edge — stress lost its teeth");
     });
 
     check("kiosk mode strips the page chrome", () => {

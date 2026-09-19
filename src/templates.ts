@@ -693,7 +693,7 @@ function itemCardInner(context: string, item: ItemInfo): string {
   return `
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <div>
-          <h3><span class="item-kind">${item.extension.toUpperCase()}</span><a href="/ctx/${esc(context)}/${esc(item.name)}?ext=${esc(item.extension)}">${esc(item.title)}</a></h3>
+          <h3><span class="item-kind${item.view === "board" ? " item-kind-board" : ""}">${item.view === "board" ? "BOARD" : item.extension.toUpperCase()}</span><a href="/ctx/${esc(context)}/${esc(item.name)}?ext=${esc(item.extension)}">${esc(item.title)}</a></h3>
           <div class="meta">${esc(item.name)}.${esc(item.extension)} &middot; updated ${esc(itemRelDate(item.updated))}</div>
           ${item.tags.length ? `<div>${tags(item.tags)}</div>` : ""}
         </div>
@@ -1405,6 +1405,31 @@ const BOARD_SCRIPT = `
   // the fence in argument order has already written the presentation.
   var stepsTotal = 0, cur = 0, nowMs = 0, ANIM = 650;
   var camT = { x: 0, y: 0, scale: 1, on: false };
+  // Hover/pin focus — the graph page's neighbourhood move: focusing a node
+  // lights its edges and dims everything unrelated. Notes toggle a sticky
+  // focus on click (figures and chips keep their click actions).
+  var hoverB = null, pinnedB = null;
+  function focusBody(){ return pinnedB || hoverB; }
+  function bodyFocT(b){
+    var f = focusBody();
+    if (!f) return 1;
+    return (b === f || f.lk[b.id] || b.lk[f.id]) ? 1 : 0.3;
+  }
+  // Per-frame visibility target for an edge: focused node's edges always show;
+  // an edge shows during its own presentation beat; otherwise the rest-ink
+  // rule applies (and recedes further while something else holds focus).
+  function edgeVisT(ed){
+    var f = focusBody();
+    if (f && (ed.a.b === f || ed.z.b === f)) return 1;
+    if (cur <= stepsTotal && ed.stepIdx === cur) return 1;
+    var rest = ed.restVisible ? 1 : 0;
+    return f ? rest * 0.25 : rest;
+  }
+  function stubSeg(p1, p2){
+    var dx = p2.x - p1.x, dy = p2.y - p1.y, dd = Math.sqrt(dx*dx + dy*dy) || 1;
+    ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p1.x + dx/dd*14, p1.y + dy/dd*14); ctx.stroke();
+  }
+
   // Auto-advance (?play=<ms> or the auto link); any real input hands control
   // back to the human. Completion raises the __boardPlayDone signal.
   var playTimer = 0;
@@ -1439,14 +1464,14 @@ const BOARD_SCRIPT = `
 
   // World-unit knobs. FIG_MAX caps a figure's longest side; LEGEND_AT is where a
   // dense figure collapses from side labels to a numbered legend beneath it.
-  var FIG_MAX = 340, LABEL_W = 170, LABEL_GAP = 18, PAD = 10, LEGEND_AT = 6, MARGIN = 46;
+  var FIG_MAX = 340, LABEL_W = 170, LABEL_GAP = 18, PAD = 10, LEGEND_AT = 6, MARGIN = 46, ANNOT_REST_MAX = 300;
   var FONT_LABEL = '11px "IBM Plex Mono", monospace';
   var FONT_CAP = '12px "IBM Plex Mono", monospace';
   var FONT_NOTE = '12.5px "IBM Plex Mono", monospace';
   var FONT_CHIP = '12px "IBM Plex Mono", monospace';
   var LABEL_LH = 14, NOTE_LH = 17, CAP_LH = 15;
 
-  var bodies = [], byId = {}, edges = [];
+  var bodies = [], byId = {}, edges = [], groupsArr = [];
   specNodes.forEach(function(n, i){
     if (!n || typeof n !== 'object') return;
     var type = (n.type === 'figure' || n.type === 'item') ? n.type : 'note';
@@ -1454,7 +1479,8 @@ const BOARD_SCRIPT = `
       x: 0, y: 0, vx: 0, vy: 0,
       hw: 60, hh: 20, cx: 0, cy: 0,
       img: null, fw: 0, fh: 0, capLines: [], legend: false, legendLines: null,
-      pins: [], labels: [], noteLines: null, chipLabel: '',
+      pins: [], labels: [], noteLines: null, chipLabel: '', lk: {}, fA: 1,
+      group: (typeof n.group === 'string' && n.group) ? n.group : null, gdx: 0, gdy: 0,
       jit: [rnd(), rnd(), rnd(), rnd()], rot: (rnd() - 0.5) * 0.05 };
     if (byId[b.id]) return; // duplicate id — first declaration wins
     byId[b.id] = b; bodies.push(b);
@@ -1469,8 +1495,18 @@ const BOARD_SCRIPT = `
       return b ? { b: b, pin: hash >= 0 ? s.slice(hash + 1) : '' } : null;
     }
     var a = end(e.from), z = end(e.to);
-    if (a && z && a.b !== z.b) edges.push({ a: a, z: z, label: e.label ? String(e.label) : '',
-      bowk: (rnd() - 0.5), j: rnd() });
+    if (a && z && a.b !== z.b){
+      // Two edge classes with different rights. Structural (figure-to-figure
+      // pin bonds) are the board's skeleton: full spring, full-time ink.
+      // Annotative (note/chip commentary onto figures) are drape: weak spring
+      // so four cross-study hubs cannot out-muscle a pair bond, and resting
+      // ink only while local (set after settle).
+      edges.push({ a: a, z: z, label: e.label ? String(e.label) : '',
+        bowk: (rnd() - 0.5), j: rnd(),
+        annot: !(a.b.type === 'figure' && z.b.type === 'figure'),
+        restVisible: true, vA: 1 });
+      a.b.lk[z.b.id] = 1; z.b.lk[a.b.id] = 1;
+    }
   });
 
   function wrapText(text, maxw, font){
@@ -1623,11 +1659,15 @@ const BOARD_SCRIPT = `
   // axis of least penetration, mild long-range repulsion so islands spread,
   // springs on declared edges, gentle gravity. Returns max speed so the relax
   // loop can stop when calm.
-  function step(){
-    for (var i=0;i<bodies.length;i++){
-      var a = bodies[i];
-      for (var j=i+1;j<bodies.length;j++){
-        var b = bodies[j];
+  // The sim, parameterized so it can run TWICE: once inside each group
+  // (members arranging themselves), once across the board (ungrouped bodies +
+  // group super-boxes). Same mechanism as figure+labels, recursed one level.
+  // units carry x/y/vx/vy/hw/hh/ulk; springs are {A, Z, annot}.
+  function relaxTick(units, springs){
+    for (var i=0;i<units.length;i++){
+      var a = units[i];
+      for (var j=i+1;j<units.length;j++){
+        var b = units[j];
         var dx = b.x - a.x, dy = b.y - a.y;
         var px = a.hw + b.hw + MARGIN - Math.abs(dx);
         var py = a.hh + b.hh + MARGIN - Math.abs(dy);
@@ -1635,20 +1675,34 @@ const BOARD_SCRIPT = `
           if (px < py){ var f = px * 0.045 * (dx < 0 ? -1 : 1); a.vx -= f; b.vx += f; }
           else { var g = py * 0.045 * (dy < 0 ? -1 : 1); a.vy -= g; b.vy += g; }
         }
-        var d2 = dx*dx + dy*dy + 0.01, d = Math.sqrt(d2), rf = 22000 / d2;
+        // linked units keep only contact separation — long-range repulsion
+        // between them just fights the spring that is trying to pair them up
+        if (a.ulk[b.id]) continue;
+        var d2 = dx*dx + dy*dy + 0.01, d = Math.sqrt(d2), rf = 12000 / d2;
         a.vx -= dx/d*rf; a.vy -= dy/d*rf; b.vx += dx/d*rf; b.vy += dy/d*rf;
       }
     }
-    for (var e=0;e<edges.length;e++){
-      var ed = edges[e], A = ed.a.b, Z = ed.z.b;
+    for (var e=0;e<springs.length;e++){
+      var ed = springs[e], A = ed.A, Z = ed.Z;
       var ex = Z.x - A.x, ey = Z.y - A.y, el = Math.sqrt(ex*ex + ey*ey) || 0.01;
-      var rest = Math.max(A.hw, A.hh) + Math.max(Z.hw, Z.hh) + 80;
-      var sf = (el - rest) * 0.015, sfx = ex/el*sf, sfy = ey/el*sf;
-      A.vx += sfx; A.vy += sfy; Z.vx -= sfx; Z.vy -= sfy;
+      // Rest length projected onto the approach direction: two linked clusters
+      // can sit side by side at their touching distance, instead of being held
+      // a full diagonal apart (which left a void that unrelated bodies then
+      // filled — the "related images ages apart with strangers between" mess).
+      var ux = Math.abs(ex/el), uy = Math.abs(ey/el);
+      var rest = (A.hw*ux + A.hh*uy) + (Z.hw*ux + Z.hh*uy) + 70;
+      var sf = (el - rest) * (ed.annot ? 0.009 : 0.028), sfx = ex/el*sf, sfy = ey/el*sf;
+      // Mass-weighted: light bodies do the travelling. Each endpoint moves in
+      // proportion to the OTHER's share of the pair's mass, so a tiny hub note
+      // chases the huge group region it annotates instead of being shoved
+      // around while the region barely feels it. Equal masses = old behavior.
+      var aM = A.hw * A.hh, zM = Z.hw * Z.hh, tM = aM + zM || 1;
+      var wa = (zM / tM) * 2, wz = (aM / tM) * 2;
+      A.vx += sfx * wa; A.vy += sfy * wa; Z.vx -= sfx * wz; Z.vy -= sfy * wz;
     }
     var maxv = 0;
-    for (var n=0;n<bodies.length;n++){
-      var p = bodies[n];
+    for (var n=0;n<units.length;n++){
+      var p = units[n];
       p.vx += (0 - p.x) * 0.0016; p.vy += (0 - p.y) * 0.0016;
       p.vx *= 0.84; p.vy *= 0.84;
       p.vx = clamp(p.vx, -50, 50); p.vy = clamp(p.vy, -50, 50);
@@ -1659,11 +1713,67 @@ const BOARD_SCRIPT = `
     return maxv;
   }
 
+  // Contact projection: direct position sweeps that GUARANTEE no two unit
+  // boxes overlap. Interleaved into the relax so a squeeze-out is re-pulled by
+  // its springs afterwards, with one guaranteeing pass at the end.
+  function project(units, cap){
+    for (var sw = 0; sw < cap; sw++){
+      var movedAny = false;
+      for (var si = 0; si < units.length; si++){
+        for (var sj = si + 1; sj < units.length; sj++){
+          var A3 = units[si], B3 = units[sj];
+          var ddx = B3.x - A3.x, ddy = B3.y - A3.y;
+          var pxx = A3.hw + B3.hw + 24 - Math.abs(ddx);
+          var pyy = A3.hh + B3.hh + 24 - Math.abs(ddy);
+          if (pxx > 0 && pyy > 0){
+            movedAny = true;
+            if (pxx < pyy){ var mx2 = (pxx/2 + 0.5) * (ddx < 0 ? -1 : 1); A3.x -= mx2; B3.x += mx2; }
+            else { var my2 = (pyy/2 + 0.5) * (ddy < 0 ? -1 : 1); A3.y -= my2; B3.y += my2; }
+          }
+        }
+      }
+      if (!movedAny) break;
+    }
+  }
+
+  // Seed linked units BESIDE the centroid of their already-placed partners;
+  // everything else on the phyllotaxis spiral. Pairs that start together stay
+  // together — independent spiral slots let strangers wedge in between.
+  function seedUnits(units, uMap){
+    for (var i=0;i<units.length;i++){
+      var bS = units[i], pxs = 0, pys = 0, pn = 0, pref = null;
+      for (var pid in bS.ulk){ var cand = uMap[pid]; if (cand && cand.seeded){ pxs += cand.x; pys += cand.y; pn++; pref = cand; } }
+      if (pn){
+        var pa3 = rnd() * 6.28318;
+        var pr3 = Math.max(pref.hw, pref.hh) + Math.max(bS.hw, bS.hh) + 60;
+        bS.x = pxs/pn + Math.cos(pa3) * pr3;
+        bS.y = pys/pn + Math.sin(pa3) * pr3;
+      } else {
+        var a = i * 2.399963 + rnd() * 0.6, rad = Math.sqrt(i + 0.6) * FIG_MAX * 0.85;
+        bS.x = Math.cos(a) * rad + (rnd() - 0.5) * 30;
+        bS.y = Math.sin(a) * rad + (rnd() - 0.5) * 30;
+      }
+      bS.seeded = true;
+    }
+  }
+
+  function relaxRun(units, springs){
+    var wv = 1;
+    for (var w=0; w<1600 && (w < 120 || wv > 0.35); w++){
+      wv = relaxTick(units, springs);
+      if (w % 150 === 149) project(units, 60);
+    }
+    project(units, 400);
+  }
+
   function fitView(pad){
     var minx=1e9, miny=1e9, maxx=-1e9, maxy=-1e9;
     for (var i=0;i<bodies.length;i++){ var b = bodies[i];
       minx = Math.min(minx, b.x - b.hw); maxx = Math.max(maxx, b.x + b.hw);
       miny = Math.min(miny, b.y - b.hh); maxy = Math.max(maxy, b.y + b.hh); }
+    for (var gi=0; gi<groupsArr.length; gi++){ var gg = groupsArr[gi];
+      minx = Math.min(minx, gg.x - gg.hw); maxx = Math.max(maxx, gg.x + gg.hw);
+      miny = Math.min(miny, gg.y - gg.hh); maxy = Math.max(maxy, gg.y + gg.hh); }
     var gw = Math.max(1, maxx - minx), gh = Math.max(1, maxy - miny);
     cam.scale = clamp(Math.min((W - pad*2)/gw, (H - pad*2)/gh), 0.08, 2.5);
     cam.x = (minx + maxx)/2; cam.y = (miny + maxy)/2;
@@ -1739,8 +1849,24 @@ const BOARD_SCRIPT = `
     ctx.closePath();
   }
 
+  // A group region: the faintest layer of the hierarchy (evidence framed >
+  // text on panels > regions barely tinted), with a small uppercase title.
+  // It fades in with its first revealed member.
+  function drawRegion(g){
+    var ga = 0;
+    for (var i=0;i<g.members.length;i++){ var a2 = aOf(g.members[i]); if (a2 > ga) ga = a2; }
+    if (ga <= 0) return;
+    roundRect(g.x - g.hw, g.y - g.hh, g.hw*2, g.hh*2, 10);
+    ctx.fillStyle = TEXT; ctx.globalAlpha = 0.045 * ga; ctx.fill();
+    ctx.globalAlpha = 0.75 * ga;
+    ctx.font = FONT_LABEL; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = DIM;
+    ctx.fillText(String(g.title).toUpperCase(), g.x - g.hw + 10, g.y - g.hh + 16);
+    ctx.globalAlpha = 1;
+  }
+
   function drawCard(b){
-    var a = aOf(b);
+    var a = aOf(b) * b.fA;
     if (a <= 0) return;
     if (b.type === 'figure'){
       var fx = figX(b) - b.fw/2, fy = figY(b) - b.fh/2;
@@ -1763,7 +1889,7 @@ const BOARD_SCRIPT = `
         // legend entries reveal with their pin's step, like side labels do
         yy += 6; ctx.textAlign = 'left'; ctx.font = FONT_LABEL;
         for (var g=0; g<b.legendLines.length; g++){
-          var la = aOf(b.legendLines[g].pin);
+          var la = aOf(b.legendLines[g].pin) * b.fA;
           if (la <= 0){ yy += LABEL_LH; continue; }
           ctx.globalAlpha = la;
           ctx.fillStyle = b.legendLines[g].first ? TEXT : MUTED;
@@ -1818,19 +1944,29 @@ const BOARD_SCRIPT = `
   function drawEdge(ed){
     var ea = aOf(ed);
     if (ea <= 0) return;
+    ed.vA += (edgeVisT(ed) - ed.vA) * 0.15;
     var zb = ed.z.b, zc = { x: zb.type === 'figure' ? figX(zb) : zb.x, y: zb.type === 'figure' ? figY(zb) : zb.y };
     var pa = edgeEnd(ed.a, zc.x, zc.y);
     var pz = edgeEnd(ed.z, pa.x, pa.y);
+    if (ed.vA <= 0.05){
+      // retracted: a stub at each anchor — quiet notice that ink lives here,
+      // revealed by hovering either node (or the edge's presentation beat)
+      ctx.strokeStyle = DIM; ctx.globalAlpha = 0.45 * ea; ctx.lineWidth = 1;
+      stubSeg(pa, pz); stubSeg(pz, pa);
+      ctx.globalAlpha = 1;
+      return;
+    }
+    var vv = ed.vA * ea;
     var dl = Math.sqrt((pz.x-pa.x)*(pz.x-pa.x) + (pz.y-pa.y)*(pz.y-pa.y)) || 1;
     var bow = clamp(ed.bowk * dl * 0.35, -64, 64);
-    ctx.strokeStyle = MUTED; ctx.globalAlpha = 0.55; ctx.lineWidth = 1;
+    ctx.strokeStyle = MUTED; ctx.globalAlpha = 0.55 * vv; ctx.lineWidth = 1;
     // rare figure-to-figure ties read as "special" — dash them apart from claims
     if (ed.a.b.type === 'figure' && ed.z.b.type === 'figure' && !ed.a.pin && !ed.z.pin) ctx.setLineDash([5,5]);
     var c = sketchSeg(pa.x, pa.y, pz.x, pz.y, bow, ea);
     ctx.setLineDash([]);
     if (ea > 0.85){
       // the arrowhead lands only once the pen arrives
-      ctx.globalAlpha = 0.55 * (ea - 0.85) / 0.15;
+      ctx.globalAlpha = 0.55 * vv * (ea - 0.85) / 0.15;
       var ang = Math.atan2(pz.y - c.y, pz.x - c.x);
       ctx.beginPath();
       ctx.moveTo(pz.x - 9*Math.cos(ang - 0.5 - (ed.j-0.5)*0.14), pz.y - 9*Math.sin(ang - 0.5 - (ed.j-0.5)*0.14));
@@ -1841,7 +1977,7 @@ const BOARD_SCRIPT = `
     ctx.globalAlpha = 1;
     if (ed.label){
       // sit the label on the curve itself (quad midpoint), not the chord
-      ctx.globalAlpha = ea;
+      ctx.globalAlpha = vv;
       var mx = 0.25*pa.x + 0.5*c.x + 0.25*pz.x, my = 0.25*pa.y + 0.5*c.y + 0.25*pz.y;
       ctx.font = FONT_LABEL; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.lineWidth = 3; ctx.strokeStyle = BG; ctx.lineJoin = 'round';
@@ -1868,7 +2004,7 @@ const BOARD_SCRIPT = `
 
   function drawCallouts(b){
     for (var i=0;i<b.labels.length;i++){
-      var lb = b.labels[i], la = aOf(lb.pin);
+      var lb = b.labels[i], la = aOf(lb.pin) * b.fA;
       if (la <= 0) continue;
       var lx = figX(b) + lb.dx, ly = figY(b) + lb.dy;
       var ax = lb.side === 'l' ? lx + LABEL_W + 4 : lx - 4;
@@ -1902,7 +2038,7 @@ const BOARD_SCRIPT = `
       ctx.globalAlpha = 1;
     }
     for (var q=0;q<b.pins.length;q++){
-      var pin = b.pins[q], pa2 = aOf(pin);
+      var pin = b.pins[q], pa2 = aOf(pin) * b.fA;
       if (pa2 <= 0) continue;
       var w = pinWorld(b, pin);
       if (pin.region){
@@ -1939,8 +2075,10 @@ const BOARD_SCRIPT = `
           Math.abs(camT.scale - cam.scale) < 0.004) camT.on = false;
     }
     ctx.clearRect(0, 0, W, H);
+    for (var fb=0; fb<bodies.length; fb++){ var bb = bodies[fb]; bb.fA += (bodyFocT(bb) - bb.fA) * 0.16; }
     ctx.save();
     ctx.translate(W/2, H/2); ctx.scale(cam.scale, cam.scale); ctx.translate(-cam.x, -cam.y);
+    for (var gr=0; gr<groupsArr.length; gr++) drawRegion(groupsArr[gr]);
     for (var i=0;i<bodies.length;i++) drawCard(bodies[i]);
     for (var e=0;e<edges.length;e++) drawEdge(edges[e]);
     for (var f=0;f<bodies.length;f++) if (bodies[f].type === 'figure') drawCallouts(bodies[f]);
@@ -1962,8 +2100,8 @@ const BOARD_SCRIPT = `
       if (b.stepIdx > cur) continue; // not revealed yet — not clickable
       if (b.type === 'figure'){
         if (Math.abs(wx - figX(b)) <= b.fw/2 && Math.abs(wy - figY(b)) <= b.fh/2) return b;
-      } else if (b.type === 'item'){
-        if (Math.abs(wx - b.x) <= b.hw && Math.abs(wy - b.y) <= b.hh) return b;
+      } else if (Math.abs(wx - b.x) <= b.hw && Math.abs(wy - b.y) <= b.hh){
+        return b; // chips and notes alike — notes are hover/pin-focus targets
       }
     }
     return null;
@@ -1984,19 +2122,25 @@ const BOARD_SCRIPT = `
     if (panning){
       if (Math.abs(p.x - panSX) + Math.abs(p.y - panSY) > 4) movedFar = true;
       cam.x = panCX - (p.x - panSX)/cam.scale; cam.y = panCY - (p.y - panSY)/cam.scale;
-    } else canvas.style.cursor = pick(p.x, p.y) ? 'pointer' : 'grab';
+    } else {
+      hoverB = pick(p.x, p.y);
+      canvas.style.cursor = hoverB ? 'pointer' : 'grab';
+    }
   });
+  canvas.addEventListener('mouseleave', function(){ hoverB = null; });
   window.addEventListener('mouseup', function(ev){
     if (!panning) return;
     panning = false; canvas.style.cursor = 'grab';
     if (movedFar) return;
     var p = pos(ev), t = pick(p.x, p.y);
-    if (!t) return;
+    if (!t){ pinnedB = null; return; } // empty click releases a pinned focus
     if (t.type === 'item'){
       var lk = parseLink(t.n.link);
       if (lk.item) window.location.href = '/ctx/' + encodeURIComponent(lk.ctx) + '/' + encodeURIComponent(lk.item);
     } else if (t.type === 'figure' && t.n.src){
       window.open(String(t.n.src), '_blank'); // full-resolution asset
+    } else if (t.type === 'note'){
+      pinnedB = (pinnedB === t) ? null : t; // sticky focus for the hub notes
     }
   });
   canvas.addEventListener('wheel', function(ev){
@@ -2023,7 +2167,8 @@ const BOARD_SCRIPT = `
     } else if (k === 'ArrowLeft' || k === 'PageUp'){
       if (cur > 1){ gotoStep(cur - 1); ev.preventDefault(); }
     } else if (k === 'Escape'){
-      if (cur <= stepsTotal){ gotoStep(stepsTotal + 1); ev.preventDefault(); }
+      if (pinnedB){ pinnedB = null; ev.preventDefault(); }
+      else if (cur <= stepsTotal){ gotoStep(stepsTotal + 1); ev.preventDefault(); }
     } else if (k === 'Home'){
       if (stepsTotal > 0){ gotoStep(1); markReveals(1); ev.preventDefault(); }
     }
@@ -2070,19 +2215,86 @@ const BOARD_SCRIPT = `
       if (e.z.pin) e.z.b.pins.forEach(function(p){ if (p.id === e.z.pin) zi = p.stepIdx; });
       e.stepIdx = Math.max(ai, zi); e.revT = 0;
     });
-    for (var i=0;i<bodies.length;i++){
-      var a = i * 2.399963 + rnd() * 0.6, rad = Math.sqrt(i + 0.6) * FIG_MAX * 0.85;
-      bodies[i].x = Math.cos(a) * rad + (rnd() - 0.5) * 30;
-      bodies[i].y = Math.sin(a) * rad + (rnd() - 0.5) * 30;
-    }
-    var wv = 1;
-    for (var w=0; w<1600 && (w < 120 || wv > 0.35); w++) wv = step();
+    // --- Grouping: ONE optional level ("group": "<id>" on any node) ---
+    // Members settle inside their group, then each group's bounding box packs
+    // as a single rigid super-body among the ungrouped bodies — the same
+    // mechanism that packs a figure with its labels, recursed exactly once.
+    var groupsMeta = (spec.groups && typeof spec.groups === 'object') ? spec.groups : {};
+    var gOrder = [], gMap = {};
+    bodies.forEach(function(b){
+      if (!b.group) return;
+      var g = gMap[b.group];
+      if (!g){
+        g = gMap[b.group] = { id: 'group:' + b.group, gid: b.group, type: 'group',
+          members: [], x: 0, y: 0, vx: 0, vy: 0, hw: 40, hh: 30, ulk: {}, title: '' };
+        gOrder.push(g);
+      }
+      g.members.push(b);
+    });
+    groupsArr = gOrder;
+    function unitOf(b){ return b.group ? gMap[b.group] : b; }
+    gOrder.forEach(function(g){
+      var ms = g.members, mById = {};
+      ms.forEach(function(m){ mById[m.id] = m; m.ulk = {}; m.seeded = false; });
+      var springs = [];
+      edges.forEach(function(e){
+        var A = e.a.b, Z = e.z.b;
+        if (mById[A.id] && mById[Z.id]){
+          springs.push({ A: A, Z: Z, annot: e.annot });
+          A.ulk[Z.id] = 1; Z.ulk[A.id] = 1;
+        }
+      });
+      seedUnits(ms, mById);
+      relaxRun(ms, springs);
+      var minx=1e9, miny=1e9, maxx=-1e9, maxy=-1e9;
+      ms.forEach(function(m){
+        minx = Math.min(minx, m.x - m.hw); maxx = Math.max(maxx, m.x + m.hw);
+        miny = Math.min(miny, m.y - m.hh); maxy = Math.max(maxy, m.y + m.hh);
+      });
+      var gcx = (minx + maxx) / 2, gcy = (miny + maxy) / 2;
+      g.hw = (maxx - minx) / 2 + 26; g.hh = (maxy - miny) / 2 + 26;
+      var mt = groupsMeta[g.gid];
+      g.title = (typeof mt === 'string') ? mt : (mt && typeof mt.title === 'string') ? mt.title : g.gid;
+      ms.forEach(function(m){ m.gdx = m.x - gcx; m.gdy = m.y - gcy; });
+    });
+    // outer pack: units in first-appearance order (declaration order preserved)
+    var units = [], seenU = {};
+    bodies.forEach(function(b){
+      var u = unitOf(b);
+      if (seenU[u.id]) return;
+      seenU[u.id] = 1; units.push(u);
+    });
+    var uById = {};
+    units.forEach(function(u){ u.ulk = {}; u.seeded = false; u.vx = 0; u.vy = 0; uById[u.id] = u; });
+    var oSprings = [];
+    edges.forEach(function(e){
+      var A = unitOf(e.a.b), Z = unitOf(e.z.b);
+      if (A === Z) return;
+      oSprings.push({ A: A, Z: Z, annot: e.annot });
+      A.ulk[Z.id] = 1; Z.ulk[A.id] = 1;
+    });
+    seedUnits(units, uById);
+    relaxRun(units, oSprings);
+    // members land at their settled offsets inside the settled group box
+    gOrder.forEach(function(g){
+      g.members.forEach(function(m){ m.x = g.x + m.gdx; m.y = g.y + m.gdy; });
+    });
+    // Rest-ink rule (settled geometry now known): an annotative edge keeps
+    // full-time ink only when it landed local; a long one retracts to stubs
+    // until hovered or until its presentation beat. Structural edges always draw.
+    edges.forEach(function(e){
+      var A = e.a.b, Z = e.z.b;
+      var gap = Math.max(Math.abs(A.x - Z.x) - (A.hw + Z.hw), Math.abs(A.y - Z.y) - (A.hh + Z.hh));
+      e.restVisible = !e.annot || gap <= ANNOT_REST_MAX;
+      e.vA = e.restVisible ? 1 : 0;
+    });
     fitView(60);
     // Settled geometry, exposed for the board-check harness (scripts/
     // board-check.js) to assert against — the numbers the real renderer uses,
     // not a parallel reimplementation. Not part of any supported page API.
     window.__boardDebug = {
       labelW: LABEL_W,
+      annotRestMax: ANNOT_REST_MAX,
       stepCount: stepsTotal,
       bodies: bodies.map(function(b){
         return { id: b.id, type: b.type, x: b.x, y: b.y, hw: b.hw, hh: b.hh,
@@ -2093,7 +2305,12 @@ const BOARD_SCRIPT = `
           labels: b.labels.map(function(l){ return { side: l.side, dx: l.dx, dy: l.dy, h: l.h, pin: l.pin.id }; }) };
       }),
       edges: edges.map(function(e){
-        return { from: e.a.b.id, fromPin: e.a.pin, to: e.z.b.id, toPin: e.z.pin };
+        return { from: e.a.b.id, fromPin: e.a.pin, to: e.z.b.id, toPin: e.z.pin,
+          annot: e.annot, restVisible: e.restVisible };
+      }),
+      groups: groupsArr.map(function(g){
+        return { id: g.gid, title: g.title, x: g.x, y: g.y, hw: g.hw, hh: g.hh,
+          members: g.members.map(function(m){ return m.id; }) };
       })
     };
     // ?step=N enters presentation at that step (camera snapped, no catch-up

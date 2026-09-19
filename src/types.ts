@@ -78,6 +78,7 @@ export interface ItemInfo {
   // Markdown-only (populated from frontmatter when present):
   title: string;       // falls back to the bare name for non-md items
   tags: string[];      // empty for non-md items
+  view?: string;       // md-only alternate rendering marker (e.g. "board")
   created: string;     // md: frontmatter; non-md: fs.stat birthtime/ctime
   updated: string;     // md: frontmatter; non-md: fs.stat mtime
   size: number;
