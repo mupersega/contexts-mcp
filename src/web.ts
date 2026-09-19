@@ -206,13 +206,16 @@ app.get("/", async (req, res) => {
     sort,
   });
 
-  const distinctStatuses = Array.from(
-    new Set(
-      all
-        .map((c) => c.metadata?.status)
-        .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
-    )
-  ).sort();
+  // Most-used statuses first, so the capped filter row shows the ones that
+  // actually partition the library; ties break alphabetically.
+  const statusCounts = new Map<string, number>();
+  for (const c of all) {
+    const st = c.metadata?.status;
+    if (typeof st === "string" && st.trim().length > 0) statusCounts.set(st, (statusCounts.get(st) ?? 0) + 1);
+  }
+  const distinctStatuses = Array.from(statusCounts.keys()).sort(
+    (a, b) => statusCounts.get(b)! - statusCounts.get(a)! || a.localeCompare(b)
+  );
   const archivedCount = all.filter((c) => c.metadata?.status === "archived").length;
 
   let visible: typeof all;
@@ -224,12 +227,19 @@ app.get("/", async (req, res) => {
     visible = all.filter((c) => c.metadata?.status !== "archived");
   }
 
-  const controls = { sort, showArchived, archivedCount, distinctStatuses, statusFilter };
+  // The landing page is a launchpad, not a catalog: under any sort, only the
+  // top slice renders (no pagination — search and the status filter are the
+  // ways to reach everything else).
+  const LANDING_CAP = 25;
+  const listTotal = visible.length;
+  const shown = visible.slice(0, LANDING_CAP);
+
+  const controls = { sort, showArchived, archivedCount, distinctStatuses, statusFilter, listTotal };
   if (req.get("HX-Request") === "true") {
-    res.send(contextListRegionFragment(visible, controls));
+    res.send(contextListRegionFragment(shown, controls));
     return;
   }
-  res.send(contextListPage(visible, controls));
+  res.send(contextListPage(shown, controls));
 });
 
 app.post("/ctx", async (req, res) => {

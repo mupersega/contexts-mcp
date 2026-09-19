@@ -522,10 +522,13 @@ export interface ContextListControls {
   sort: "name" | "recent_activity" | "created" | "updated";
   showArchived: boolean;
   archivedCount: number;
-  // Free-form, drawn from the library. Empty when no contexts have a status.
+  // Free-form, drawn from the library, most-used first. Empty when no
+  // contexts have a status.
   distinctStatuses: string[];
   // Undefined means "all" — no status filter applied.
   statusFilter?: string;
+  // Total contexts matching the current filter, BEFORE the landing cap.
+  listTotal: number;
 }
 
 export function contextListPage(
@@ -605,6 +608,24 @@ export function contextListRegionFragment(
   // Status filter row — only rendered when at least one context has a
   // status set. "All" clears the filter; each distinct status narrows the
   // list. Archived appears alongside other statuses when present.
+  // Statuses are free-form and agents mint them liberally, so the row is
+  // capped like tag chips: the most-used few show, the rest collapse behind a
+  // "+N" toggle. An active filter beyond the cap is swapped into view.
+  const STATUS_CAP = 6;
+  const statusTab = (s: string) =>
+    tab(
+      s === controls.statusFilter,
+      listHref({ sort: controls.sort, status: s, showArchived: controls.showArchived }),
+      esc(s)
+    );
+  let shownStatuses = controls.distinctStatuses.slice(0, STATUS_CAP);
+  if (controls.statusFilter && controls.distinctStatuses.includes(controls.statusFilter) && !shownStatuses.includes(controls.statusFilter)) {
+    shownStatuses = [...shownStatuses.slice(0, STATUS_CAP - 1), controls.statusFilter];
+  }
+  const hiddenStatuses = controls.distinctStatuses.filter((s) => !shownStatuses.includes(s));
+  const statusOverflow = hiddenStatuses.length
+    ? `<span class="tag-overflow" hidden>${hiddenStatuses.map(statusTab).join("")}</span><button type="button" class="chip tag-more" onclick="var s=this.previousElementSibling;s.hidden=!s.hidden;this.textContent=s.hidden?'+${hiddenStatuses.length}':'less'">+${hiddenStatuses.length}</button>`
+    : "";
   const statusFilterRow = controls.distinctStatuses.length
     ? `
         <span class="list-divider" aria-hidden="true"></span>
@@ -614,15 +635,7 @@ export function contextListRegionFragment(
           listHref({ sort: controls.sort, showArchived: controls.showArchived }),
           "all"
         )}
-        ${controls.distinctStatuses
-          .map((s) =>
-            tab(
-              s === controls.statusFilter,
-              listHref({ sort: controls.sort, status: s, showArchived: controls.showArchived }),
-              esc(s)
-            )
-          )
-          .join("")}`
+        ${shownStatuses.map(statusTab).join("")}${statusOverflow}`
     : "";
 
   // The archived toggle is a view-level "include hidden" chip for the
@@ -649,6 +662,11 @@ export function contextListRegionFragment(
         ${archivedChip}
       </div>
       <div id="context-list" style="margin-top:1rem;">${list}</div>
+      ${
+        controls.listTotal > contexts.length
+          ? `<div class="meta" style="margin-top:0.8rem;">Showing the ${contexts.length} most relevant of ${controls.listTotal} contexts under this sort — search or narrow by status to reach the rest.</div>`
+          : ""
+      }
     </div>`;
 }
 
